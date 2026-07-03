@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/vintage-library-ai_iconos-y-animacion/',
+  base: './',
   root: '.',
   publicDir: 'public',
   server: {
