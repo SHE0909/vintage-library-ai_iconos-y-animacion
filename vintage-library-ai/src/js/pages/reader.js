@@ -34,19 +34,23 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   const searchBtn = el('button', { class: 'icon icon-round', type: 'button', title: 'Buscar texto' }, icon('search', { size: 16 }));
   const favPanelBtn = el('button', { class: 'icon icon-round', type: 'button', title: 'Frases guardadas de este libro' }, icon('starOutline', { size: 16 }));
 
+  bookmarkBtn.setAttribute('title', 'Marcar esta pagina');
+
   const toolbar = el('div', { class: 'reader-toolbar' }, [
-    el('div', { class: 'group' }, [
-      el('button', { class: 'icon reader-back-btn', onClick: () => navigate('#/dashboard') }, [icon('arrowLeft', { size: 15 }), el('span', { class: 'icn-label' }, 'Volver a la estanteria')])
+    el('div', { class: 'group group-back' }, [
+      el('button', { class: 'icon reader-back-btn', title: 'Volver a la estanteria', onClick: () => navigate('#/dashboard') }, [icon('arrowLeft', { size: 15 }), el('span', { class: 'icn-label' }, 'Volver a la estanteria')])
     ]),
     el('div', { class: 'group reader-pager' }, [
       el('button', { class: 'page-turn-btn', id: 'prev-page', title: 'Pagina anterior' }, icon('chevronLeft', { size: 17 })),
       pageIndicator,
       el('button', { class: 'page-turn-btn', id: 'next-page', title: 'Pagina siguiente' }, icon('chevronRight', { size: 17 }))
     ]),
-    el('div', { class: 'group' }, [
+    el('div', { class: 'group group-tools' }, [
       bookmarkBtn,
+      el('span', { class: 'toolbar-divider', 'aria-hidden': 'true' }),
       searchBtn,
       favPanelBtn,
+      el('span', { class: 'toolbar-divider', 'aria-hidden': 'true' }),
       el('button', { class: 'icon icon-round', id: 'zoom-out', title: 'Alejar' }, icon('zoomOut', { size: 15 })),
       el('button', { class: 'icon icon-round', id: 'zoom-in', title: 'Acercar' }, icon('zoomIn', { size: 15 }))
     ])
@@ -54,7 +58,8 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
 
   const toolbar2 = el('div', { class: 'reader-toolbar reader-toolbar-2' }, [
     el('div', { class: 'group' }, [
-      el('span', { class: 'reader-hint' }, 'Selecciona texto para remarcar ·'),
+      el('span', { class: 'reader-hint' }, [icon('brush', { size: 12 }), el('span', { class: 'reader-hint-text' }, 'Selecciona texto para remarcar')]),
+      el('span', { class: 'toolbar-divider toolbar-divider-v2', 'aria-hidden': 'true' }),
       el('label', { class: 'reader-inline-label' }, 'Estilo:'),
       styleSelect,
       el('label', { class: 'reader-inline-label reader-fav-label' }, [favToggle, icon('starOutline', { size: 13 }), el('span', {}, 'Guardar como frase')])
@@ -116,6 +121,7 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   function updateBookmarkBtnState() {
     const active = bookRecord && bookRecord.bookmarkPage === pageNum;
     bookmarkLabel.textContent = active ? 'Marcador en esta pagina' : 'Marcar aqui';
+    bookmarkBtn.setAttribute('title', active ? 'Marcador en esta pagina' : 'Marcar esta pagina');
     bookmarkBtn.classList.toggle('active', !!active);
   }
 
