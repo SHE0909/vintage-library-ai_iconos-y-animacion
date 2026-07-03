@@ -1,0 +1,55 @@
+/* =========================================================
+   VINTAGE LIBRARY — DESIGN TOKENS
+   Paleta inspirada en encuadernaciones de cuero, papel
+   envejecido y estanterias de caoba bajo luz de lampara.
+   ========================================================= */
+:root {
+  /* Color */
+  --color-parchment: #ECE2CC;   /* fondo principal, papel envejecido */
+  --color-parchment-dark: #DED0AE; /* fondo secundario / paneles */
+  --color-mahogany: #5C3A21;    /* madera, bordes, estanterias */
+  --color-mahogany-dark: #3B2413; /* madera en sombra */
+  --color-ink: #2A1D14;         /* texto principal, casi negro calido */
+  --color-gold: #B08A4E;        /* acentos, detalles dorados */
+  --color-gold-bright: #D4AF6A; /* hover / highlights dorados */
+  --color-rose: #B37B87;        /* rosa antiguo, acento secundario */
+  --color-burgundy: #6B2737;    /* enfasis, estados de error/atencion */
+  --color-sage: #7C8B6F;        /* estado de exito, lectura completada */
+
+  /* Tipografia */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Source Serif 4', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Escala tipografica */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --text-3xl: 3.5rem;
+
+  /* Espaciado */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2.5rem;
+  --space-6: 4rem;
+
+  /* Bordes y sombras */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --shadow-book: 0 6px 16px rgba(42, 29, 20, 0.35), 0 2px 4px rgba(42, 29, 20, 0.25);
+  --shadow-panel: 0 1px 3px rgba(42, 29, 20, 0.2);
+
+  /* Textura de veta de madera (usada como fondo repetible) */
+  --wood-grain: repeating-linear-gradient(
+    90deg,
+    rgba(0,0,0,0.06) 0px,
+    rgba(0,0,0,0.06) 1px,
+    transparent 1px,
+    transparent 6px
+  );
+}
