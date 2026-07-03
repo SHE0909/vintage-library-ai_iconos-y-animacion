@@ -9,10 +9,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,13 +20,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - name: Install
+      - name: Install dependencies
         run: npm install
         working-directory: vintage-library-ai
 
-      - name: Build
+      - name: Build project
         run: npm run build
         working-directory: vintage-library-ai
 
@@ -44,5 +40,5 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy
-        uses: actions/deploy-pages@v4sd
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
