@@ -27,30 +27,23 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: vintage-library-ai/package-lock.json
 
       - name: Instalar dependencias
         run: npm install
-        working-directory: vintage-library-ai
 
-      - name: Compilar (vite build)
+      - name: Build
         run: npm run build
-        working-directory: vintage-library-ai
 
-      - name: Preparar artefacto de Pages
+      - name: Upload
         uses: actions/upload-pages-artifact@v3
         with:
-          path: vintage-library-ai/dist
+          path: dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Desplegar a GitHub Pages
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
