@@ -17,9 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: vintage-library-ai
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,9 +31,11 @@ jobs:
 
       - name: Instalar dependencias
         run: npm install
+        working-directory: vintage-library-ai
 
       - name: Compilar (vite build)
         run: npm run build
+        working-directory: vintage-library-ai
 
       - name: Preparar artefacto de Pages
         uses: actions/upload-pages-artifact@v3
@@ -45,9 +45,11 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Desplegar a GitHub Pages
         id: deployment
