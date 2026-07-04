@@ -2,7 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import {
   getBookFile, getBook, updateBook, getCurrentUser,
-  addHighlight, listHighlights, deleteHighlight, updateHighlight
+  addHighlight, listHighlights, deleteHighlight, updateHighlight, restoreHighlight
 } from '../data.js';
 import { el, showToast, showLoadingOverlay, hideLoadingOverlay, showMenu } from '../utils.js';
 import { icon } from '../icons.js';
@@ -15,6 +15,14 @@ const STYLE_OPTIONS = [
   { value: 'underline', label: 'Subrayar' },
   { value: 'strike', label: 'Tachar' },
   { value: 'box', label: 'Recuadro' }
+];
+// Grosores de pluma disponibles para el modo "Dibujar", guardados como
+// fraccion del ancho de la pagina para que se vean igual sin importar
+// el nivel de zoom o el tamaño de pantalla.
+const PEN_WIDTHS = [
+  { value: 0.0025, label: 'Fino' },
+  { value: 0.005, label: 'Medio' },
+  { value: 0.009, label: 'Grueso' }
 ];
 
 export async function renderReader(root, { bookId, initialPage, navigate }) {
@@ -57,12 +65,28 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   ]);
 
   const toolbar2 = el('div', { class: 'reader-toolbar reader-toolbar-2' }, [
-    el('div', { class: 'group' }, [
-      el('span', { class: 'reader-hint' }, [icon('brush', { size: 12 }), el('span', { class: 'reader-hint-text' }, 'Selecciona texto para remarcar')]),
+    el('div', { class: 'group group-modes' }, [
+      el('button', { class: 'icon icon-round mode-btn active', id: 'mode-select', type: 'button', title: 'Seleccionar texto para remarcar' }, icon('cursorText', { size: 15 })),
+      el('button', { class: 'icon icon-round mode-btn', id: 'mode-draw', type: 'button', title: 'Dibujar a mano alzada' }, icon('brush', { size: 15 })),
+      el('button', { class: 'icon icon-round mode-btn', id: 'mode-erase', type: 'button', title: 'Borrar trazos dibujados' }, icon('eraser', { size: 15 })),
+      el('span', { class: 'toolbar-divider toolbar-divider-v2', 'aria-hidden': 'true' }),
+      el('button', { class: 'icon icon-round', id: 'undo-btn', type: 'button', title: 'Deshacer', disabled: 'true' }, icon('undo', { size: 15 })),
+      el('button', { class: 'icon icon-round', id: 'redo-btn', type: 'button', title: 'Rehacer', disabled: 'true' }, icon('redo', { size: 15 }))
+    ]),
+    el('div', { class: 'group group-select-tools' }, [
+      el('span', { class: 'reader-hint', id: 'reader-hint' }, [icon('brush', { size: 12 }), el('span', { class: 'reader-hint-text' }, 'Selecciona texto para remarcar')]),
       el('span', { class: 'toolbar-divider toolbar-divider-v2', 'aria-hidden': 'true' }),
       el('label', { class: 'reader-inline-label' }, 'Estilo:'),
       styleSelect,
       el('label', { class: 'reader-inline-label reader-fav-label' }, [favToggle, icon('starOutline', { size: 13 }), el('span', {}, 'Guardar como frase')])
+    ]),
+    el('div', { class: 'group group-draw-tools', id: 'draw-tools', style: 'display:none;' }, [
+      el('label', { class: 'reader-inline-label' }, 'Color:'),
+      ...HIGHLIGHT_COLORS.map((c) => el('button', { class: 'swatch pen-swatch', type: 'button', style: `background:${c}`, 'data-color': c, title: c })),
+      el('input', { type: 'color', class: 'swatch swatch-custom pen-swatch-custom', value: '#D4AF6A', title: 'Color personalizado' }),
+      el('span', { class: 'toolbar-divider toolbar-divider-v2', 'aria-hidden': 'true' }),
+      el('label', { class: 'reader-inline-label' }, 'Grosor:'),
+      el('select', { class: 'input reader-style-select', id: 'pen-width-select' }, PEN_WIDTHS.map((w, i) => el('option', { value: w.value, ...(i === 1 ? { selected: 'true' } : {}) }, w.label)))
     ])
   ]);
 
@@ -71,8 +95,11 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   const canvas = el('canvas', { id: 'pdf-canvas' });
   const highlightLayer = el('div', { class: 'highlight-layer' });
   const textLayer = el('div', { class: 'textLayer' });
+  const drawingLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  drawingLayer.setAttribute('class', 'drawing-layer');
   pageStack.appendChild(canvas);
   pageStack.appendChild(highlightLayer);
+  pageStack.appendChild(drawingLayer);
   pageStack.appendChild(textLayer);
   canvasWrap.appendChild(pageStack);
 
@@ -193,8 +220,12 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     highlightLayer.innerHTML = '';
     highlightLayer.style.width = `${width}px`;
     highlightLayer.style.height = `${height}px`;
+    drawingLayer.setAttribute('width', width);
+    drawingLayer.setAttribute('height', height);
+    drawingLayer.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    drawingLayer.innerHTML = '';
     const all = await listHighlights(bookId);
-    all.filter((h) => h.page === num).forEach((h) => {
+    all.filter((h) => h.page === num && h.kind !== 'drawing').forEach((h) => {
       h.rects.forEach((r) => {
         const div = el('div', {
           class: `highlight-mark style-${h.style || 'fill'}${h.isFavorite ? ' is-favorite' : ''}`,
@@ -219,7 +250,7 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
               label: 'Eliminar resaltado',
               danger: true,
               onClick: async () => {
-                await deleteHighlight(h.id);
+                await commitErase(h);
                 drawHighlights(num, width, height);
               }
             }
@@ -228,6 +259,77 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
         highlightLayer.appendChild(div);
       });
     });
+
+    // Trazos de dibujo a mano alzada de esta pagina
+    all.filter((h) => h.page === num && h.kind === 'drawing' && h.points && h.points.length > 1).forEach((h) => {
+      drawingLayer.appendChild(strokeToPathEl(h, width, height));
+    });
+  }
+
+  function strokeToPathEl(h, width, height) {
+    const d = h.points.map((p, i) => `${i === 0 ? 'M' : 'L'}${(p.x * width).toFixed(1)},${(p.y * height).toFixed(1)}`).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', h.color || '#D4AF6A');
+    path.setAttribute('stroke-width', Math.max(1, (h.strokeWidth || 0.005) * width));
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.dataset.strokeId = h.id;
+    return path;
+  }
+
+  // ---------------- DESHACER / REHACER ----------------
+  // Historial de acciones de la sesion actual de lectura (se reinicia si
+  // se recarga la pagina). Cubre tanto los resaltados de texto como los
+  // trazos dibujados a mano, para que "Deshacer" funcione igual sin
+  // importar cual de las dos herramientas se uso.
+  let history = [];
+  let historyIndex = -1;
+
+  function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
+    if (undoBtn) undoBtn.disabled = historyIndex < 0;
+    if (redoBtn) redoBtn.disabled = historyIndex >= history.length - 1;
+  }
+
+  // Se llama cada vez que se crea un resaltado o trazo nuevo.
+  async function commitAdd(record) {
+    history = history.slice(0, historyIndex + 1);
+    history.push({ type: 'add', record });
+    historyIndex = history.length - 1;
+    updateUndoRedoButtons();
+  }
+
+  // Se llama cada vez que se borra un resaltado o trazo existente
+  // (borrador, o el "Eliminar" del menu de un resaltado).
+  async function commitErase(record) {
+    await deleteHighlight(record.id);
+    history = history.slice(0, historyIndex + 1);
+    history.push({ type: 'erase', record });
+    historyIndex = history.length - 1;
+    updateUndoRedoButtons();
+  }
+
+  async function undoAction() {
+    if (historyIndex < 0) return;
+    const entry = history[historyIndex];
+    if (entry.type === 'add') await deleteHighlight(entry.record.id);
+    else await restoreHighlight(entry.record);
+    historyIndex--;
+    await drawHighlights(pageNum, pageStack.offsetWidth, pageStack.offsetHeight);
+    updateUndoRedoButtons();
+  }
+
+  async function redoAction() {
+    if (historyIndex >= history.length - 1) return;
+    historyIndex++;
+    const entry = history[historyIndex];
+    if (entry.type === 'add') await restoreHighlight(entry.record);
+    else await deleteHighlight(entry.record.id);
+    await drawHighlights(pageNum, pageStack.offsetWidth, pageStack.offsetHeight);
+    updateUndoRedoButtons();
   }
 
   // La ultima seleccion para la que ya se mostro el selector de color, para
@@ -269,10 +371,11 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     const text = selection.toString().slice(0, 300);
 
     showColorPicker(clientRects[clientRects.length - 1], async (color) => {
-      await addHighlight({
+      const record = await addHighlight({
         bookId, page: pageNum, color, rects, text,
         style: styleSelect.value, isFavorite: favToggle.checked
       });
+      await commitAdd(record);
       selection.removeAllRanges();
       lastSelectionSignature = '';
       drawHighlights(pageNum, width, height);
@@ -473,6 +576,152 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   });
   toolbar.querySelector('#zoom-in').addEventListener('click', () => { scale = Math.min(scale + 0.2, 3); renderPage(pageNum); });
   toolbar.querySelector('#zoom-out').addEventListener('click', () => { scale = Math.max(scale - 0.2, 0.5); renderPage(pageNum); });
+
+  // ---------------- MODO: seleccionar / dibujar / borrar ----------------
+  let readerMode = 'select';
+  let penColor = '#D4AF6A';
+  let penWidth = parseFloat(PEN_WIDTHS[1].value);
+
+  const modeSelectBtn = toolbar2.querySelector('#mode-select');
+  const modeDrawBtn = toolbar2.querySelector('#mode-draw');
+  const modeEraseBtn = toolbar2.querySelector('#mode-erase');
+  const selectToolsGroup = toolbar2.querySelector('.group-select-tools');
+  const drawToolsGroup = toolbar2.querySelector('#draw-tools');
+  const readerHintText = toolbar2.querySelector('.reader-hint-text');
+  const undoBtn = toolbar2.querySelector('#undo-btn');
+  const redoBtn = toolbar2.querySelector('#redo-btn');
+  const penWidthSelect = toolbar2.querySelector('#pen-width-select');
+
+  function setMode(mode) {
+    readerMode = mode;
+    [modeSelectBtn, modeDrawBtn, modeEraseBtn].forEach((b) => b.classList.remove('active'));
+    if (mode === 'select') modeSelectBtn.classList.add('active');
+    if (mode === 'draw') modeDrawBtn.classList.add('active');
+    if (mode === 'erase') modeEraseBtn.classList.add('active');
+
+    selectToolsGroup.style.display = mode === 'select' ? 'flex' : 'none';
+    drawToolsGroup.style.display = mode === 'draw' ? 'flex' : 'none';
+
+    // En modo dibujo/borrado, la capa de texto deja de capturar el
+    // puntero (para no interferir con el trazo) y la capa de dibujo
+    // pasa a capturarlo; en modo seleccion es al reves.
+    textLayer.style.pointerEvents = mode === 'select' ? 'auto' : 'none';
+    drawingLayer.style.pointerEvents = mode === 'select' ? 'none' : 'auto';
+    drawingLayer.classList.toggle('erase-cursor', mode === 'erase');
+    drawingLayer.classList.toggle('draw-cursor', mode === 'draw');
+
+    if (readerHintText) {
+      readerHintText.textContent = mode === 'draw'
+        ? 'Dibuja con el mouse o el dedo sobre la pagina'
+        : mode === 'erase'
+          ? 'Toca o arrastra sobre un trazo para borrarlo'
+          : 'Selecciona texto para remarcar';
+    }
+  }
+
+  modeSelectBtn.addEventListener('click', () => setMode('select'));
+  modeDrawBtn.addEventListener('click', () => setMode('draw'));
+  modeEraseBtn.addEventListener('click', () => setMode('erase'));
+
+  drawToolsGroup.querySelectorAll('.pen-swatch').forEach((sw) => {
+    sw.addEventListener('click', () => {
+      penColor = sw.dataset.color;
+      drawToolsGroup.querySelectorAll('.pen-swatch').forEach((s) => s.classList.remove('selected'));
+      sw.classList.add('selected');
+    });
+  });
+  drawToolsGroup.querySelector('.pen-swatch')?.classList.add('selected');
+  drawToolsGroup.querySelector('.pen-swatch-custom').addEventListener('input', (e) => {
+    penColor = e.target.value;
+    drawToolsGroup.querySelectorAll('.pen-swatch').forEach((s) => s.classList.remove('selected'));
+  });
+  penWidthSelect.addEventListener('change', () => { penWidth = parseFloat(penWidthSelect.value); });
+
+  // ---- Dibujar a mano alzada ----
+  let currentStrokePoints = null;
+  let liveStrokePath = null;
+
+  function pointerToNormalized(e) {
+    const rect = pageStack.getBoundingClientRect();
+    return {
+      x: Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1),
+      y: Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1)
+    };
+  }
+
+  drawingLayer.addEventListener('pointerdown', (e) => {
+    if (readerMode === 'draw') {
+      e.preventDefault();
+      drawingLayer.setPointerCapture(e.pointerId);
+      currentStrokePoints = [pointerToNormalized(e)];
+      liveStrokePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      liveStrokePath.setAttribute('fill', 'none');
+      liveStrokePath.setAttribute('stroke', penColor);
+      liveStrokePath.setAttribute('stroke-width', Math.max(1, penWidth * pageStack.offsetWidth));
+      liveStrokePath.setAttribute('stroke-linecap', 'round');
+      liveStrokePath.setAttribute('stroke-linejoin', 'round');
+      drawingLayer.appendChild(liveStrokePath);
+    } else if (readerMode === 'erase') {
+      e.preventDefault();
+      drawingLayer.setPointerCapture(e.pointerId);
+      eraseAtPoint(e);
+    }
+  });
+  drawingLayer.addEventListener('pointermove', (e) => {
+    if (readerMode === 'draw' && currentStrokePoints) {
+      currentStrokePoints.push(pointerToNormalized(e));
+      const width = pageStack.offsetWidth;
+      const height = pageStack.offsetHeight;
+      const d = currentStrokePoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${(p.x * width).toFixed(1)},${(p.y * height).toFixed(1)}`).join(' ');
+      liveStrokePath.setAttribute('d', d);
+    } else if (readerMode === 'erase' && e.buttons === 1) {
+      eraseAtPoint(e);
+    }
+  });
+  async function finishStroke() {
+    if (!currentStrokePoints) return;
+    const points = currentStrokePoints;
+    currentStrokePoints = null;
+    if (liveStrokePath) { liveStrokePath.remove(); liveStrokePath = null; }
+    if (points.length < 2) return;
+    const record = await addHighlight({
+      bookId, page: pageNum, color: penColor, kind: 'drawing',
+      points, strokeWidth: penWidth, rects: []
+    });
+    await commitAdd(record);
+    drawHighlights(pageNum, pageStack.offsetWidth, pageStack.offsetHeight);
+  }
+  drawingLayer.addEventListener('pointerup', finishStroke);
+  drawingLayer.addEventListener('pointercancel', finishStroke);
+
+  // ---- Borrador: recuerda que trazos ya se borraron en el arrastre actual ----
+  let erasedThisDrag = new Set();
+  drawingLayer.addEventListener('pointerup', () => { erasedThisDrag = new Set(); });
+  async function eraseAtPoint(e) {
+    const rect = pageStack.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const strokeId = target?.dataset?.strokeId;
+    if (!strokeId || erasedThisDrag.has(strokeId)) return;
+    const all = await listHighlights(bookId);
+    const record = all.find((h) => h.id === strokeId);
+    if (!record) return;
+    erasedThisDrag.add(strokeId);
+    await commitErase(record);
+    drawHighlights(pageNum, pageStack.offsetWidth, pageStack.offsetHeight);
+  }
+
+  undoBtn.addEventListener('click', undoAction);
+  redoBtn.addEventListener('click', redoAction);
+  setMode('select');
+
+  document.addEventListener('keydown', function onDrawKey(e) {
+    if (!document.body.contains(shell)) { document.removeEventListener('keydown', onDrawKey); return; }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoAction(); }
+    if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) { e.preventDefault(); redoAction(); }
+  });
 
   document.addEventListener('keydown', function onKey(e) {
     if (!document.body.contains(shell)) { document.removeEventListener('keydown', onKey); return; }

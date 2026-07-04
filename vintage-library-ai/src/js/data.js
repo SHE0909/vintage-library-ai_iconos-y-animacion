@@ -19,5 +19,6 @@ export const {
   signUp, signIn, signOut, onAuthChange, getCurrentUser,
   addBook, listBooks, getBook, updateBook, deleteBook, getBookFile,
   listCategories, addCategory, deleteCategory, setBookCover, getBookCover,
-  addHighlight, listHighlights, deleteHighlight, updateHighlight, listFavoriteHighlights
+  addHighlight, listHighlights, deleteHighlight, updateHighlight, listFavoriteHighlights,
+  restoreHighlight
 } = adapter;

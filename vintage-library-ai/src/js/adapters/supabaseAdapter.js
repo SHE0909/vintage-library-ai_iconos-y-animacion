@@ -231,8 +231,8 @@ export async function deleteCategory(userId, name) {
   return list;
 }
 
-// ---------------- RESALTADOS (highlights) ----------------
-export async function addHighlight({ bookId, page, color, rects, text, kind, style, isFavorite }) {
+// ---------------- RESALTADOS (highlights) y trazos de dibujo ----------------
+export async function addHighlight({ bookId, page, color, rects, text, kind, style, isFavorite, points, strokeWidth }) {
   const currentUser = getCurrentUser();
   const data = {
     book_id: bookId,
@@ -243,10 +243,35 @@ export async function addHighlight({ bookId, page, color, rects, text, kind, sty
     kind: kind || 'highlight',
     is_favorite: !!isFavorite,
     rects: rects || [],
+    points: points || null,
+    stroke_width: strokeWidth || null,
     text: text || '',
     created_at: new Date().toISOString()
   };
   const { data: row, error } = await supabase.from('highlights').insert(data).select().single();
+  if (error) throw error;
+  return mapHighlight(row);
+}
+
+// Vuelve a insertar un resaltado/trazo eliminado, conservando su id
+// original (usado por deshacer/rehacer en el lector).
+export async function restoreHighlight(record) {
+  const data = {
+    id: record.id,
+    book_id: record.bookId,
+    owner_id: record.ownerId,
+    page: record.page,
+    color: record.color,
+    style: record.style,
+    kind: record.kind,
+    is_favorite: record.isFavorite,
+    rects: record.rects || [],
+    points: record.points || null,
+    stroke_width: record.strokeWidth || null,
+    text: record.text || '',
+    created_at: record.createdAt || new Date().toISOString()
+  };
+  const { data: row, error } = await supabase.from('highlights').upsert(data).select().single();
   if (error) throw error;
   return mapHighlight(row);
 }
@@ -294,6 +319,8 @@ function mapHighlight(row) {
     kind: row.kind,
     isFavorite: row.is_favorite,
     rects: row.rects,
+    points: row.points || null,
+    strokeWidth: row.stroke_width || null,
     text: row.text,
     createdAt: row.created_at
   };

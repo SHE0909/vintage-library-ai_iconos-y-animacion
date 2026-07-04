@@ -33,7 +33,20 @@ const RAW = {
   square: '<rect x="4.5" y="4.5" width="15" height="15" rx="2.2"/>',
   logout: '<path d="M14.5 8V6.2c0-.9-.7-1.7-1.7-1.7H6.2c-.9 0-1.7.8-1.7 1.7v11.6c0 .9.8 1.7 1.7 1.7h6.6c1 0 1.7-.8 1.7-1.7V16"/><line x1="9.5" y1="12" x2="20" y2="12"/><polyline points="16.7,8.7 20,12 16.7,15.3"/>',
   leaf: '<path d="M6 18C4.5 12 8 6 18 5c1 8-4.5 13.5-12 13Z"/><path d="M6 18c2-3.5 5-6.5 9-9"/>',
-  download: '<path d="M12 3.5v11.6"/><polyline points="7.5,10.6 12,15.1 16.5,10.6"/><path d="M4.5 16.5v2.3c0 .9.8 1.7 1.7 1.7h11.6c1 0 1.7-.8 1.7-1.7v-2.3"/>'
+  download: '<path d="M12 3.5v11.6"/><polyline points="7.5,10.6 12,15.1 16.5,10.6"/><path d="M4.5 16.5v2.3c0 .9.8 1.7 1.7 1.7h11.6c1 0 1.7-.8 1.7-1.7v-2.3"/>',
+  palette: '<path d="M12 4C7.3 4 3.5 7.6 3.5 12s3.8 8 8.5 8c1 0 1.7-.8 1.7-1.7 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.8.7-1.5 1.6-1.5h1.9c2.6 0 4.7-2 4.7-4.5C20.9 6.9 16.9 4 12 4Z"/><circle cx="7.6" cy="11.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.2" cy="7.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.4" cy="7.8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.8" cy="11.2" r="1.1" fill="currentColor" stroke="none"/>',
+  undo: '<path d="M7 10H15.5A4.5 4.5 0 0 1 15.5 19H12.5"/><polyline points="10.5,6.5 7,10 10.5,13.5"/>',
+  redo: '<path d="M17 10H8.5A4.5 4.5 0 0 0 8.5 19H11.5"/><polyline points="13.5,6.5 17,10 13.5,13.5"/>',
+  eraser: '<path d="M17.5 13.5 9.8 5.8a1.6 1.6 0 0 0-2.3 0L4.3 9c-.6.6-.6 1.6 0 2.3l6 6h4.4Z"/><line x1="9" y1="10.5" x2="14.5" y2="16"/><line x1="6.5" y1="19.5" x2="19.5" y2="19.5"/>',
+  music: '<path d="M9 17.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/><path d="M18 15.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/><path d="M11.5 12.5V5.8l9-1.8v6.5"/>',
+  play: '<path d="M7 5.2v13.6c0 .9 1 1.4 1.7.9l10.7-6.8c.6-.4.6-1.4 0-1.8L8.7 4.3C8 3.8 7 4.3 7 5.2Z"/>',
+  pause: '<rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/>',
+  skipNext: '<path d="M6.5 5.5v13l9-6.5Z"/><line x1="17.5" y1="5.5" x2="17.5" y2="18.5"/>',
+  skipPrev: '<path d="M17.5 5.5v13l-9-6.5Z"/><line x1="6.5" y1="5.5" x2="6.5" y2="18.5"/>',
+  upload: '<path d="M12 15.1V3.5"/><polyline points="7.5,8 12,3.5 16.5,8"/><path d="M4.5 16.5v2.3c0 .9.8 1.7 1.7 1.7h11.6c1 0 1.7-.8 1.7-1.7v-2.3"/>',
+  radio: '<circle cx="12" cy="14" r="6.2"/><circle cx="12" cy="14" r="1.3" fill="currentColor" stroke="none"/><path d="M8.5 6 12 3.5 15.5 6"/><line x1="12" y1="3.5" x2="12" y2="7.8"/>',
+  cursorText: '<line x1="9.5" y1="4.5" x2="9.5" y2="19.5"/><line x1="14.5" y1="4.5" x2="14.5" y2="19.5"/><line x1="7.5" y1="4.5" x2="11.5" y2="4.5"/><line x1="7.5" y1="19.5" x2="11.5" y2="19.5"/><line x1="12.5" y1="4.5" x2="16.5" y2="4.5"/><line x1="12.5" y1="19.5" x2="16.5" y2="19.5"/>',
+  volume: '<path d="M4.5 9.5v5h3.3l4.7 3.8V5.7L7.8 9.5Z"/><path d="M16 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.9a7.5 7.5 0 0 1 0 10.2"/>'
 };
 
 export function iconMarkup(name, { size = 18 } = {}) {

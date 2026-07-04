@@ -1,11 +1,13 @@
 import {
   listBooks, addBook, updateBook, deleteBook, signOut, getCurrentUser,
   listCategories, addCategory, deleteCategory, getBookCover, setBookCover,
-  listFavoriteHighlights
+  listFavoriteHighlights, getBookFile
 } from '../data.js';
 import { el, showToast, showMenu, iconBtn } from '../utils.js';
 import { icon } from '../icons.js';
 import { COVER_PRESETS, getCoverPreset } from '../coverPresets.js';
+import { generatePdfCoverThumbnail } from '../pdfThumbnail.js';
+import { BG_THEMES, getStoredTheme, applyTheme } from '../theme.js';
 
 const DEFAULT_CATEGORIES = ['Favoritos', 'Pendientes', 'General'];
 const NEW_CATEGORY_VALUE = '__new__';
@@ -84,18 +86,52 @@ export async function renderDashboard(root, { navigate }) {
 }
 
 function topbar(user, navigate, onToggleSidebar) {
+  const themeBtn = el('button', { class: 'link', type: 'button', title: 'Cambiar fondo' }, [icon('palette', { size: 16 }), el('span', { class: 'icn-label' }, 'Fondo')]);
+  themeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openThemePicker(themeBtn.getBoundingClientRect());
+  });
+
   return el('div', { class: 'topbar' }, [
     el('div', { style: 'display:flex; align-items:center; gap:12px;' }, [
       el('button', { class: 'link sidebar-toggle', onClick: onToggleSidebar }, icon('menu', { size: 20 })),
       el('span', { class: 'brand' }, [icon('book', { size: 20, className: 'brand-icon' }), el('span', {}, 'Vintage Library')])
     ]),
     el('nav', {}, [
+      themeBtn,
       el('span', {}, `Hola, ${user.name || user.email}`),
       el('button', {
         class: 'link', onClick: async () => { await signOut(); navigate('#/login'); }
       }, [icon('logout', { size: 14 }), el('span', {}, 'Cerrar sesion')])
     ])
   ]);
+}
+
+function openThemePicker(anchorRect) {
+  document.querySelectorAll('.theme-picker-panel').forEach((p) => p.remove());
+  const current = getStoredTheme();
+  const panel = el('div', {
+    class: 'theme-picker-panel',
+    style: `top:${anchorRect.bottom + window.scrollY + 6}px; left:${Math.min(anchorRect.left + window.scrollX, window.innerWidth - 210)}px;`
+  }, BG_THEMES.map((t) => el('button', {
+    type: 'button',
+    class: `theme-picker-option${t.id === current ? ' active' : ''}`,
+    onClick: (e) => {
+      e.stopPropagation();
+      applyTheme(t.id);
+      panel.remove();
+    }
+  }, [
+    el('span', { class: 'theme-picker-swatch', style: `background:${t.swatch}` }),
+    el('span', {}, t.label)
+  ])));
+  document.body.appendChild(panel);
+  setTimeout(() => {
+    document.addEventListener('click', function closeOnce() {
+      panel.remove();
+      document.removeEventListener('click', closeOnce);
+    }, { once: true });
+  }, 0);
 }
 
 function drawSidebar(sidebar, categories, user, { onAddCategory, onDeleteCategory, onOpenSavedPhrases }) {
@@ -394,16 +430,24 @@ function categorySelect(categories, selected) {
 
 function coverPicker(existingBook) {
   const wrap = el('div', { class: 'cover-picker' });
+  const hasCustomAlready = !!(existingBook && (existingBook.hasCover || existingBook.coverPreset));
   const modeRow = el('div', { class: 'cover-picker-modes' }, [
     el('label', { class: 'radio-chip' }, [
-      el('input', { type: 'radio', name: 'coverMode', value: 'upload', checked: 'true' }), ' Subir imagen'
+      el('input', { type: 'radio', name: 'coverMode', value: 'auto', checked: hasCustomAlready ? undefined : 'true' }), ' Portada del libro (1a pagina)'
+    ]),
+    el('label', { class: 'radio-chip' }, [
+      el('input', { type: 'radio', name: 'coverMode', value: 'upload', checked: hasCustomAlready ? 'true' : undefined }), ' Subir imagen'
     ]),
     el('label', { class: 'radio-chip' }, [
       el('input', { type: 'radio', name: 'coverMode', value: 'preset' }), ' Portada prediseñada'
     ])
   ]);
 
-  const uploadSection = el('div', { class: 'cover-picker-section' }, [
+  const autoSection = el('div', { class: 'cover-picker-section' }, [
+    el('p', { class: 'cover-picker-hint' }, 'Usaremos la primera pagina del PDF como portada, tal como aparece en el libro. Puedes cambiarla cuando quieras.')
+  ]);
+
+  const uploadSection = el('div', { class: 'cover-picker-section', style: 'display:none;' }, [
     el('input', { class: 'input', type: 'file', name: 'coverImage', accept: 'image/*' })
   ]);
 
@@ -428,17 +472,20 @@ function coverPicker(existingBook) {
 
   modeRow.querySelectorAll('input[name="coverMode"]').forEach((radio) => {
     radio.addEventListener('change', () => {
+      autoSection.style.display = radio.value === 'auto' && radio.checked ? 'block' : 'none';
       uploadSection.style.display = radio.value === 'upload' && radio.checked ? 'block' : 'none';
       presetSection.style.display = radio.value === 'preset' && radio.checked ? 'block' : 'none';
     });
   });
 
   wrap.appendChild(modeRow);
+  wrap.appendChild(autoSection);
   wrap.appendChild(uploadSection);
   wrap.appendChild(presetSection);
 
   return {
     node: wrap,
+    getMode: () => (wrap.querySelector('input[name="coverMode"]:checked')?.value || 'auto'),
     getFile: () => uploadSection.querySelector('input[type=file]').files[0],
     getPreset: () => (presetGrid.dataset.value || null)
   };
@@ -487,6 +534,7 @@ function openBookModal({ categories, user, existingBook, onSaved }) {
     e.preventDefault();
     const fd = new FormData(form);
     const file = fd.get('file');
+    const coverMode = cover.getMode();
     const coverImageFile = cover.getFile();
     const coverPresetId = cover.getPreset();
     let category = fd.get('category');
@@ -507,21 +555,45 @@ function openBookModal({ categories, user, existingBook, onSaved }) {
           author: fd.get('author') || existingBook.author,
           category
         });
-        if (coverImageFile && coverImageFile.size > 0) {
+        if (coverMode === 'upload' && coverImageFile && coverImageFile.size > 0) {
           await setBookCover(existingBook.id, coverImageFile);
-        } else if (coverPresetId) {
+        } else if (coverMode === 'preset' && coverPresetId) {
           await updateBook(existingBook.id, { coverPreset: coverPresetId, hasCover: false });
+        } else if (coverMode === 'auto') {
+          try {
+            const pdfBlob = await getBookFile(existingBook.id);
+            const thumb = await generatePdfCoverThumbnail(pdfBlob);
+            await setBookCover(existingBook.id, thumb);
+          } catch {
+            showToast('No se pudo generar la portada automatica desde el PDF.');
+          }
         }
         showToast('Libro actualizado.');
       } else {
         if (!file || file.size === 0) { showToast('Selecciona un archivo PDF.'); submitBtn.disabled = false; submitBtn.textContent = originalLabel; return; }
+        let coverImage = null;
+        let coverPreset = null;
+        if (coverMode === 'upload' && coverImageFile && coverImageFile.size > 0) {
+          coverImage = coverImageFile;
+        } else if (coverMode === 'preset' && coverPresetId) {
+          coverPreset = coverPresetId;
+        } else {
+          // 'auto' (o si el usuario dejo la seccion elegida sin completar):
+          // la portada es la primera pagina del propio PDF que esta subiendo.
+          try {
+            coverImage = await generatePdfCoverThumbnail(file);
+          } catch {
+            // Si por algun motivo no se puede renderizar (PDF danado, etc.)
+            // seguimos sin portada personalizada; el lomo usara el color por defecto.
+          }
+        }
         await addBook({
           title: fd.get('title') || file.name.replace(/\.pdf$/i, ''),
           author: fd.get('author'),
           category,
           file,
-          coverImage: coverImageFile && coverImageFile.size > 0 ? coverImageFile : null,
-          coverPreset: (!coverImageFile || coverImageFile.size === 0) ? coverPresetId : null
+          coverImage,
+          coverPreset
         });
         showToast('Libro agregado a tu estanteria.');
       }

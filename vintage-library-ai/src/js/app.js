@@ -3,15 +3,23 @@ import { renderAuthPage } from './pages/auth.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderReader } from './pages/reader.js';
 import { mountRosePetals } from './rosePetals.js';
+import { mountMusicPlayer } from './musicPlayer.js';
+import { initTheme } from './theme.js';
 import { icon } from './icons.js';
 import { el } from './utils.js';
 
 const root = document.getElementById('app');
 let currentUser = null;
 
+initTheme();
+
 // Fondo ambiental de petalos de rosa: se monta una sola vez, fuera de #app,
 // para que sobreviva a los cambios de pantalla.
 mountRosePetals();
+
+// Reproductor de musica flotante: igual que los petalos, vive fuera de
+// #app para seguir sonando aunque naveguemos entre pantallas.
+mountMusicPlayer();
 
 // ---------------------------------------------------------
 // PWA: registrar el service worker y ofrecer instalar la app

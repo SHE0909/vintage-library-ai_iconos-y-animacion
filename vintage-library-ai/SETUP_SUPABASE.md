@@ -35,7 +35,9 @@ create table categories (
   list text[] not null default '{}'
 );
 
--- Tabla de resaltados
+-- Tabla de resaltados (tambien guarda los trazos de dibujo a mano
+-- alzada del lector, con kind='drawing': points y stroke_width se
+-- usan solo para esos, quedan null en los resaltados de texto normales)
 create table highlights (
   id uuid primary key default gen_random_uuid(),
   book_id uuid not null references books(id) on delete cascade,
@@ -46,9 +48,17 @@ create table highlights (
   kind text not null default 'highlight',
   is_favorite boolean not null default false,
   rects jsonb not null,
+  points jsonb,
+  stroke_width numeric,
   text text default '',
   created_at timestamptz not null default now()
 );
+
+-- Si ya tenias este proyecto de Supabase creado antes de la funcion de
+-- dibujo a mano alzada, corre esto una sola vez para agregar las columnas
+-- nuevas sin perder tus resaltados existentes:
+--   alter table highlights add column if not exists points jsonb;
+--   alter table highlights add column if not exists stroke_width numeric;
 
 -- ---------------------------------------------------------
 -- Seguridad: Row Level Security (RLS)

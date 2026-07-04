@@ -19,6 +19,77 @@ body {
 #app { min-height: 100%; position: relative; z-index: 1; }
 
 /* =========================================================
+   TEMAS DE FONDO ALTERNATIVOS
+   Cambian solo el "papel de fondo" detras de toda la app;
+   el resto de la paleta (paneles, botones, texto) se mantiene
+   igual para no perder legibilidad. Se activan poniendo
+   data-theme="..." en <body> (ver src/js/theme.js).
+   ========================================================= */
+body[data-theme="amaderado"] {
+  background: #6b4426;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 2px, transparent 2px, transparent 26px),
+    repeating-linear-gradient(90deg, rgba(255,222,173,0.06) 0px, transparent 1px, transparent 13px),
+    linear-gradient(100deg, #7a5232, #55371f 60%, #6b4426);
+}
+body[data-theme="cuero"] {
+  background: #3b2413;
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0,0,0,0.35), transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(0,0,0,0.3), transparent 40%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(0,0,0,0.05) 0, rgba(0,0,0,0.05) 1px, transparent 2px, transparent 5px),
+    linear-gradient(160deg, #5c3a21, #2a1d14 85%);
+}
+body[data-theme="marmol"] {
+  background: #d9d2c2;
+  background-image:
+    repeating-linear-gradient(115deg, rgba(120,110,95,0.12) 0px, transparent 2px, transparent 22px),
+    repeating-linear-gradient(25deg, rgba(120,110,95,0.10) 0px, transparent 2px, transparent 30px),
+    linear-gradient(160deg, #efe9dd, #c3bca9 75%);
+  color: #2a1d14;
+}
+body[data-theme="nocturno"] {
+  background: #0c0a08;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 20%, rgba(212,175,106,0.5), transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 15%, rgba(212,175,106,0.4), transparent 100%),
+    radial-gradient(1.5px 1.5px at 40% 60%, rgba(212,175,106,0.35), transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 75%, rgba(212,175,106,0.4), transparent 100%),
+    radial-gradient(ellipse at top, rgba(107,39,55,0.18), transparent 60%),
+    linear-gradient(160deg, #1a1712, #0c0a08 80%);
+  color: #ECE2CC;
+}
+
+/* =========================================================
+   SELECTOR DE TEMA DE FONDO
+   ========================================================= */
+.theme-picker-panel {
+  position: fixed;
+  z-index: 60;
+  background: var(--color-mahogany-dark);
+  border: 1px solid rgba(212,175,106,0.35);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-2);
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+}
+.theme-picker-option {
+  display: flex; align-items: center; gap: 8px;
+  border: none; background: transparent; cursor: pointer;
+  padding: 6px; border-radius: 6px; width: 100%;
+  color: var(--color-parchment); font-family: var(--font-body); font-size: 0.82rem;
+  text-align: left;
+}
+.theme-picker-option:hover { background: rgba(212,175,106,0.15); }
+.theme-picker-option.active { background: rgba(212,175,106,0.25); }
+.theme-picker-swatch {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.4); flex-shrink: 0;
+}
+
+/* =========================================================
    PETALOS DE ROSA CAYENDO (fondo ambiental, decorativo)
    ========================================================= */
 .rose-petals-bg {
@@ -283,7 +354,13 @@ button, input, select, textarea { font-family: inherit; }
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: var(--space-4) var(--space-3) 22px;
+  /* padding-top ampliado: el navegador convierte overflow-y:visible en
+     "auto" automaticamente porque overflow-x ya es "auto" (regla del
+     spec de CSS), asi que cualquier cosa posicionada arriba del lomo del
+     libro (la barra de editar/mas opciones, .spine-actions con
+     top:-30px) quedaba recortada por ese scroll invisible. Dejamos aqui
+     arriba el espacio suficiente para que quepa completa. */
+  padding: 46px var(--space-3) 22px;
   overflow-x: auto;
   overflow-y: visible;
   min-height: 200px;
@@ -431,6 +508,31 @@ button, input, select, textarea { font-family: inherit; }
   pointer-events: auto;
   cursor: pointer;
 }
+
+/* Capa SVG de dibujo a mano alzada, superpuesta encima del resaltado y
+   por debajo de la capa de texto (que se desactiva mientras se dibuja). */
+.drawing-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  touch-action: none;
+}
+.drawing-layer.draw-cursor { cursor: crosshair; }
+.drawing-layer.erase-cursor { cursor: cell; }
+
+/* Botones de modo (seleccionar / dibujar / borrar) en la segunda barra */
+.mode-btn.active { background: rgba(212,175,106,0.28); color: var(--color-gold-bright); }
+
+.pen-swatch {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.35);
+  cursor: pointer; flex-shrink: 0; padding: 0;
+}
+.pen-swatch.selected { border-color: var(--color-gold-bright); box-shadow: 0 0 0 2px rgba(212,175,106,0.4); }
+.pen-swatch-custom { width: 22px; height: 22px; padding: 0; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,0.35); cursor: pointer; }
+
+.group-draw-tools { align-items: center; }
 
 .highlight-picker {
   position: absolute;
@@ -645,8 +747,9 @@ button, input, select, textarea { font-family: inherit; }
 /* =========================================================
    SELECTOR DE PORTADA
    ========================================================= */
-.cover-picker-modes { display: flex; gap: var(--space-3); margin-bottom: var(--space-2); }
+.cover-picker-modes { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-2); }
 .radio-chip { font-size: var(--text-sm); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.cover-picker-hint { font-size: 0.78rem; opacity: 0.75; margin: 0; }
 .cover-preset-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; }
 .cover-preset-swatch {
   position: relative; height: 64px; border-radius: 4px; cursor: pointer;
@@ -810,6 +913,7 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--color-parchment); cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 .icon-round:hover { background: rgba(212,175,106,0.18); border-color: var(--color-gold-bright); transform: translateY(-1px); }
+.icon-round:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 .modal-close {
   width: 30px; height: 30px; border-radius: 50%; padding: 0;
   border: 1px solid var(--color-mahogany); color: var(--color-mahogany);
@@ -919,3 +1023,97 @@ button, input, select, textarea { font-family: inherit; }
   .page-flip-leaf { display: none; }
 }
 
+
+/* =========================================================
+   REPRODUCTOR DE MUSICA FLOTANTE
+   ========================================================= */
+.music-fab {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 80;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(212,175,106,0.5);
+  background: radial-gradient(circle at 35% 30%, var(--color-gold), var(--color-mahogany-dark) 75%);
+  color: var(--color-parchment);
+  display: grid; place-items: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-book);
+  transition: transform 0.15s ease;
+}
+.music-fab:hover { transform: translateY(-2px) scale(1.04); }
+
+.music-panel {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--space-4) + 64px);
+  z-index: 80;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 140px));
+  background: var(--color-parchment);
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel), 0 10px 30px rgba(0,0,0,0.35);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.music-panel.open { display: flex; }
+.music-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-mahogany);
+  color: var(--color-parchment);
+  font-family: var(--font-display);
+}
+.music-panel-header span { display: flex; align-items: center; gap: 6px; }
+
+.music-tabs { display: flex; border-bottom: 1px solid rgba(92,58,33,0.2); }
+.music-tab-btn {
+  flex: 1; border: none; background: none; padding: 8px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-ink); opacity: 0.6;
+}
+.music-tab-btn.active { opacity: 1; border-bottom: 2px solid var(--color-gold); font-weight: bold; }
+
+.music-tab-body { padding: var(--space-2) var(--space-3); overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 120px; max-height: 260px; }
+.music-upload-label { position: relative; align-self: flex-start; overflow: hidden; }
+.music-upload-label input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.music-track-list { display: flex; flex-direction: column; gap: 4px; }
+.music-track-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 6px 8px; border-radius: 6px; background: rgba(92,58,33,0.06);
+}
+.music-track-row.is-current { background: rgba(212,175,106,0.25); }
+.music-track-play {
+  display: flex; align-items: center; gap: 8px; border: none; background: none; cursor: pointer;
+  color: var(--color-ink); font-size: 0.82rem; text-align: left; flex: 1; min-width: 0;
+}
+.music-track-play span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-track-remove { border: none; background: none; cursor: pointer; color: var(--color-burgundy); opacity: 0.7; }
+.music-track-remove:hover { opacity: 1; }
+.music-track-tag { font-size: 0.65rem; opacity: 0.6; font-family: var(--font-mono); flex-shrink: 0; }
+
+.music-radio-search { display: flex; }
+.music-radio-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--color-gold); background: transparent; border-radius: 999px;
+  padding: 4px 10px; font-size: 0.72rem; cursor: pointer; color: var(--color-mahogany);
+}
+.chip:hover { background: rgba(212,175,106,0.2); }
+
+.music-now-playing {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px var(--space-3);
+  background: var(--color-mahogany-dark);
+  color: var(--color-parchment);
+  border-top: 1px solid rgba(212,175,106,0.3);
+}
+.music-now-playing-label { flex: 1; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-volume { width: 60px; }
+
+@media (max-width: 640px) {
+  .music-panel { right: 12px; left: 12px; width: auto; bottom: calc(var(--space-4) + 60px); }
+  .music-fab { right: 16px; bottom: 16px; }
+}

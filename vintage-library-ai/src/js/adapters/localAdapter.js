@@ -250,8 +250,8 @@ export async function deleteCategory(userId, name) {
   return list;
 }
 
-// ---------------- RESALTADOS (highlights) ----------------
-export async function addHighlight({ bookId, page, color, rects, text, kind, style, isFavorite }) {
+// ---------------- RESALTADOS (highlights) y trazos de dibujo ----------------
+export async function addHighlight({ bookId, page, color, rects, text, kind, style, isFavorite, points, strokeWidth }) {
   const currentUser = getCurrentUser();
   const highlights = readLS(LS_HIGHLIGHTS, []);
   const highlight = {
@@ -264,12 +264,26 @@ export async function addHighlight({ bookId, page, color, rects, text, kind, sty
     kind: kind || 'highlight',
     isFavorite: !!isFavorite,
     rects: rects || [],
+    points: points || null,
+    strokeWidth: strokeWidth || null,
     text: text || '',
     createdAt: new Date().toISOString()
   };
   highlights.push(highlight);
   writeLS(LS_HIGHLIGHTS, highlights);
   return highlight;
+}
+
+// Vuelve a insertar un resaltado/trazo que se habia eliminado (usado por
+// deshacer/rehacer), conservando su id e info original en vez de crear uno
+// nuevo, para que el historial de acciones se pueda referenciar de ida y vuelta.
+export async function restoreHighlight(record) {
+  const highlights = readLS(LS_HIGHLIGHTS, []);
+  if (!highlights.some((h) => h.id === record.id)) {
+    highlights.push(record);
+    writeLS(LS_HIGHLIGHTS, highlights);
+  }
+  return record;
 }
 
 export async function listHighlights(bookId) {
