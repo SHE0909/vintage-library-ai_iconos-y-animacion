@@ -1,0 +1,18 @@
+{
+  "name": "Vintage Library — Tu biblioteca personal",
+  "short_name": "Vintage Library",
+  "description": "Guarda, organiza y lee tus libros digitales en una biblioteca virtual con estilo clasico.",
+  "start_url": "./#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ECE2CC",
+  "theme_color": "#5C3A21",
+  "lang": "es",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

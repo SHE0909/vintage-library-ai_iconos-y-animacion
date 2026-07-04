@@ -32,7 +32,8 @@ const RAW = {
   squareCheck: '<rect x="4.5" y="4.5" width="15" height="15" rx="2.2"/><polyline points="8.3,12.3 11,15 15.8,9.2"/>',
   square: '<rect x="4.5" y="4.5" width="15" height="15" rx="2.2"/>',
   logout: '<path d="M14.5 8V6.2c0-.9-.7-1.7-1.7-1.7H6.2c-.9 0-1.7.8-1.7 1.7v11.6c0 .9.8 1.7 1.7 1.7h6.6c1 0 1.7-.8 1.7-1.7V16"/><line x1="9.5" y1="12" x2="20" y2="12"/><polyline points="16.7,8.7 20,12 16.7,15.3"/>',
-  leaf: '<path d="M6 18C4.5 12 8 6 18 5c1 8-4.5 13.5-12 13Z"/><path d="M6 18c2-3.5 5-6.5 9-9"/>'
+  leaf: '<path d="M6 18C4.5 12 8 6 18 5c1 8-4.5 13.5-12 13Z"/><path d="M6 18c2-3.5 5-6.5 9-9"/>',
+  download: '<path d="M12 3.5v11.6"/><polyline points="7.5,10.6 12,15.1 16.5,10.6"/><path d="M4.5 16.5v2.3c0 .9.8 1.7 1.7 1.7h11.6c1 0 1.7-.8 1.7-1.7v-2.3"/>'
 };
 
 export function iconMarkup(name, { size = 18 } = {}) {

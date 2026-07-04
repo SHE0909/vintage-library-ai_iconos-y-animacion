@@ -230,14 +230,32 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     });
   }
 
+  // La ultima seleccion para la que ya se mostro el selector de color, para
+  // no volver a abrirlo repetidas veces mientras el usuario sigue ajustando
+  // los "handles" de seleccion en movil.
+  let lastSelectionSignature = '';
+
+  function selectionSignature(range) {
+    return [
+      range.startContainer, range.startOffset,
+      range.endContainer, range.endOffset
+    ].join('|');
+  }
+
   function handleSelection() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
     if (!textLayer.contains(range.commonAncestorContainer)) return;
 
-    const clientRects = Array.from(range.getClientRects());
+    const signature = selectionSignature(range);
+    if (signature === lastSelectionSignature) return;
+
+    const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
     if (clientRects.length === 0) return;
+
+    lastSelectionSignature = signature;
+
     const wrapRect = pageStack.getBoundingClientRect();
     const width = pageStack.offsetWidth;
     const height = pageStack.offsetHeight;
@@ -256,41 +274,99 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
         style: styleSelect.value, isFavorite: favToggle.checked
       });
       selection.removeAllRanges();
+      lastSelectionSignature = '';
       drawHighlights(pageNum, width, height);
       if (favToggle.checked) showToast('Frase guardada en "Frases guardadas".');
-    });
+    }, () => { lastSelectionSignature = ''; });
   }
 
-  function showColorPicker(anchorRect, onPick) {
+  // En movil, el navegador tiene su propio menu nativo de "Copiar / Compartir
+  // / Seleccionar todo" que aparece al remarcar texto y puede tapar nuestro
+  // selector de color o cerrarlo antes de tiempo (el "click" fantasma que
+  // dispara el sistema justo despues de soltar el dedo). Por eso:
+  // 1) Ademas de "mouseup" (rapido en escritorio), escuchamos "touchend" y
+  //    "selectionchange" con una pequeña espera, porque en tactil la
+  //    seleccion puede seguir ajustandose un poco despues de levantar el dedo.
+  // 2) El listener que cierra el picker al tocar afuera se agrega con un
+  //    pequeño retraso y usa "pointerdown" en vez de "click", para no
+  //    confundirse con el clic sintetico que genera el propio toque.
+  let selectionTimer = null;
+  function scheduleSelectionCheck(delay) {
+    clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(handleSelection, delay);
+  }
+
+  textLayer.addEventListener('mouseup', () => scheduleSelectionCheck(0));
+  textLayer.addEventListener('touchend', () => scheduleSelectionCheck(350));
+  document.addEventListener('selectionchange', function onSelectionChange() {
+    if (!document.body.contains(shell)) { document.removeEventListener('selectionchange', onSelectionChange); return; }
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!textLayer.contains(range.commonAncestorContainer)) return;
+    scheduleSelectionCheck(450);
+  });
+
+  function showColorPicker(anchorRect, onPick, onDismiss) {
     const existing = document.querySelector('.highlight-picker');
     if (existing) existing.remove();
+
+    let dismissed = false;
+    function cleanup() {
+      if (dismissed) return;
+      dismissed = true;
+      picker.remove();
+      document.removeEventListener('pointerdown', onPointerDownOutside, true);
+    }
+    function pick(color) {
+      cleanup();
+      onPick(color);
+    }
+    function onPointerDownOutside(e) {
+      if (picker.contains(e.target)) return;
+      cleanup();
+      if (onDismiss) onDismiss();
+    }
+
     const customInput = el('input', { type: 'color', class: 'swatch swatch-custom', value: '#D4AF6A', title: 'Color personalizado' });
-    // El listener global de "cerrar al hacer clic afuera" (mas abajo) escucha
-    // clics en todo el documento. Sin stopPropagation en 'click', el simple
-    // hecho de abrir el selector de color nativo cerraba y eliminaba este
-    // picker antes de poder elegir un color. Se detiene la propagacion en
-    // los tres eventos relevantes para permitir elegir un color personalizado.
-    customInput.addEventListener('click', (e) => { e.stopPropagation(); });
+    // El listener de "cerrar al tocar afuera" (mas abajo) escucha toda la
+    // pagina. Sin detener la propagacion aqui, el simple hecho de abrir el
+    // selector de color nativo (o de tocar un swatch) cerraba y eliminaba
+    // este picker antes de poder elegir un color.
+    customInput.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     customInput.addEventListener('input', (e) => { e.stopPropagation(); });
-    customInput.addEventListener('change', (e) => { e.stopPropagation(); onPick(customInput.value); picker.remove(); });
-    const picker = el('div', {
-      class: 'highlight-picker',
-      style: `left:${anchorRect.right + window.scrollX}px; top:${anchorRect.bottom + window.scrollY + 4}px;`
-    }, [
+    customInput.addEventListener('change', (e) => { e.stopPropagation(); pick(customInput.value); });
+    const picker = el('div', { class: 'highlight-picker' }, [
       ...HIGHLIGHT_COLORS.map((c) => el('button', {
         class: 'swatch',
+        type: 'button',
         style: `background:${c}`,
-        onClick: (e) => { e.stopPropagation(); onPick(c); picker.remove(); }
+        onPointerdown: (e) => { e.stopPropagation(); },
+        onClick: (e) => { e.stopPropagation(); pick(c); }
       })),
       customInput
     ]);
     document.body.appendChild(picker);
-    setTimeout(() => {
-      document.addEventListener('click', function closeOnce() {
-        picker.remove();
-        document.removeEventListener('click', closeOnce);
-      }, { once: true });
-    }, 0);
+
+    // Posicionamos despues de insertarlo para poder medir su tamaño real y
+    // no dejarlo fuera de la pantalla en moviles con poco espacio.
+    const pickerRect = picker.getBoundingClientRect();
+    const margin = 8;
+    let left = anchorRect.right + window.scrollX;
+    let top = anchorRect.bottom + window.scrollY + 6;
+    if (left + pickerRect.width > window.scrollX + window.innerWidth - margin) {
+      left = window.scrollX + window.innerWidth - pickerRect.width - margin;
+    }
+    if (left < window.scrollX + margin) left = window.scrollX + margin;
+    if (top + pickerRect.height > window.scrollY + window.innerHeight - margin) {
+      top = anchorRect.top + window.scrollY - pickerRect.height - 6;
+    }
+    picker.style.left = `${left}px`;
+    picker.style.top = `${top}px`;
+
+    // Retraso antes de armar el cierre por toque afuera, para no cerrarlo
+    // con el mismo gesto que acaba de terminar la seleccion de texto.
+    setTimeout(() => document.addEventListener('pointerdown', onPointerDownOutside, true), 300);
   }
 
   // ---------------- BUSQUEDA DE TEXTO ----------------
@@ -386,8 +462,6 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     showToast(newVal ? `Marcador guardado en la pagina ${pageNum}.` : 'Marcador eliminado.');
     updateBookmarkBtnState();
   });
-
-  textLayer.addEventListener('mouseup', handleSelection);
 
   toolbar.querySelector('#prev-page').addEventListener('click', () => {
     if (pageNum <= 1) return;

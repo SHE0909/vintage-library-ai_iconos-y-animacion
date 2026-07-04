@@ -23,11 +23,36 @@ export async function renderDashboard(root, { navigate }) {
   const shell = el('div', { class: 'app-shell' });
   const sidebar = el('aside', { class: 'sidebar', id: 'sidebar' });
   const content = el('div', { class: 'content' });
+  const sidebarBackdrop = el('div', { class: 'sidebar-backdrop', id: 'sidebar-backdrop' });
 
-  shell.appendChild(topbar(user, navigate, () => sidebar.classList.toggle('open')));
-  const layout = el('div', { class: 'layout' }, [sidebar, content]);
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('visible');
+  }
+  function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarBackdrop.classList.add('visible');
+  }
+
+  shell.appendChild(topbar(user, navigate, () => {
+    if (sidebar.classList.contains('open')) closeSidebar(); else openSidebar();
+  }));
+  const layout = el('div', { class: 'layout' }, [sidebar, sidebarBackdrop, content]);
   shell.appendChild(layout);
   root.appendChild(shell);
+
+  // Cerrar el menu lateral al tocar/hacer clic en cualquier parte fuera de
+  // el (el overlay cubre todo lo demas mientras el sidebar esta abierto).
+  // El listener se auto-elimina si el usuario navega fuera del dashboard,
+  // para no acumular listeners cada vez que se vuelve a esta pantalla.
+  sidebarBackdrop.addEventListener('click', closeSidebar);
+  document.addEventListener('click', function onDocClick(e) {
+    if (!document.body.contains(shell)) { document.removeEventListener('click', onDocClick); return; }
+    if (!sidebar.classList.contains('open')) return;
+    if (sidebar.contains(e.target)) return;
+    if (e.target.closest('.sidebar-toggle')) return;
+    closeSidebar();
+  });
 
   // Estado del modo "Seleccionar" (persiste entre redibujos del contenido,
   // se resetea si se refresca todo el dashboard)
@@ -52,7 +77,7 @@ export async function renderDashboard(root, { navigate }) {
     selectState.active = false;
     selectState.ids.clear();
     await redrawContent();
-    sidebar.classList.remove('open');
+    closeSidebar();
   }
 
   await refresh();
@@ -89,6 +114,7 @@ function drawSidebar(sidebar, categories, user, { onAddCategory, onDeleteCategor
           e.preventDefault();
           document.getElementById(`cat-${slug(c)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           sidebar.classList.remove('open');
+          document.getElementById('sidebar-backdrop')?.classList.remove('visible');
         }
       }, c),
       !isDefault ? el('button', {

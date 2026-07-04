@@ -16,7 +16,45 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-#app { min-height: 100%; }
+#app { min-height: 100%; position: relative; z-index: 1; }
+
+/* =========================================================
+   PETALOS DE ROSA CAYENDO (fondo ambiental, decorativo)
+   ========================================================= */
+.rose-petals-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.rose-petal {
+  position: absolute;
+  top: -8%;
+  left: var(--petal-left, 50%);
+  width: var(--petal-size, 14px);
+  height: calc(var(--petal-size, 14px) * 0.78);
+  background: linear-gradient(135deg, var(--color-burgundy), #7d2c3c 55%, #4a1522);
+  border-radius: 0% 70% 0% 70%;
+  opacity: var(--petal-opacity, 0.7);
+  box-shadow: 0 0 4px rgba(0,0,0,0.15);
+  animation-name: rose-petal-fall;
+  animation-duration: var(--petal-duration, 14s);
+  animation-delay: var(--petal-delay, 0s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes rose-petal-fall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25%  { transform: translate3d(var(--petal-drift, 40px), 28vh, 0) rotate(90deg); }
+  50%  { transform: translate3d(0, 55vh, 0) rotate(180deg); }
+  75%  { transform: translate3d(calc(var(--petal-drift, 40px) * -1), 82vh, 0) rotate(270deg); }
+  100% { transform: translate3d(0, 118vh, 0) rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rose-petals-bg { display: none; }
+}
 
 h1, h2, h3 { font-family: var(--font-display); margin: 0 0 var(--space-2); color: var(--color-ink); }
 h1 { font-size: var(--text-3xl); font-weight: 600; }
@@ -168,6 +206,8 @@ button, input, select, textarea { font-family: inherit; }
 .sidebar-add-cat input { padding: 0.4rem 0.6rem; font-size: var(--text-sm); }
 .sidebar-toggle { display: none; background: none; border: none; color: inherit; cursor: pointer; padding: 0; opacity: 1 !important; }
 
+.sidebar-backdrop { display: none; }
+
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
   .sidebar {
@@ -182,6 +222,20 @@ button, input, select, textarea { font-family: inherit; }
   }
   .sidebar.open { left: 0; }
   .sidebar-toggle { display: inline-flex; }
+
+  /* Capa invisible detras del menu lateral: al tocarla (o tocar cualquier
+     cosa del dashboard fuera del menu) el menu se cierra. */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 49px 0 0 0;
+    background: rgba(26,17,10,0.35);
+    z-index: 35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .sidebar-backdrop.visible { opacity: 1; pointer-events: auto; }
 }
 
 /* =========================================================
@@ -229,8 +283,9 @@ button, input, select, textarea { font-family: inherit; }
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: var(--space-3) var(--space-3) 22px;
+  padding: var(--space-4) var(--space-3) 22px;
   overflow-x: auto;
+  overflow-y: visible;
   min-height: 200px;
 }
 .shelf::after {
@@ -278,19 +333,15 @@ button, input, select, textarea { font-family: inherit; }
 .book-spine .spine-progress i { display: block; height: 100%; background: var(--color-gold-bright); }
 
 .spine-edit {
-  position: absolute;
-  top: 4px; right: 4px;
-  width: 20px; height: 20px;
+  width: 22px; height: 22px;
   border: none; border-radius: 4px;
-  background: rgba(0,0,0,0.4);
+  background: transparent;
   color: #fff;
   cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.15s ease;
-  z-index: 2;
+  display: grid;
+  place-items: center;
 }
-.book-spine:hover .spine-edit,
-.book-spine:focus-within .spine-edit { opacity: 1; }
+.spine-edit:hover { color: var(--color-gold-bright); }
 
 .add-book-tile {
   width: 108px;
@@ -365,7 +416,10 @@ button, input, select, textarea { font-family: inherit; }
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  -webkit-user-select: text;
+  user-select: text;
 }
+.textLayer { -webkit-user-select: text; user-select: text; touch-action: pan-y pinch-zoom; }
 .textLayer ::selection { background: rgba(212,175,106,0.45); }
 
 .highlight-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
@@ -381,17 +435,27 @@ button, input, select, textarea { font-family: inherit; }
 .highlight-picker {
   position: absolute;
   display: flex;
-  gap: 6px;
-  padding: 6px;
+  gap: 8px;
+  padding: 8px;
   background: var(--color-ink);
   border-radius: 999px;
   box-shadow: var(--shadow-book);
   z-index: 200;
+  max-width: min(320px, calc(100vw - 16px));
+  flex-wrap: wrap;
 }
 .highlight-picker .swatch {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.6);
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (hover: none) {
+  /* Objetivos de toque mas generosos para elegir color en movil. */
+  .highlight-picker { gap: 10px; padding: 10px; }
+  .highlight-picker .swatch { width: 34px; height: 34px; }
+  .highlight-picker .swatch-custom { width: 34px; height: 34px; }
 }
 
 /* Modales */
@@ -400,6 +464,34 @@ button, input, select, textarea { font-family: inherit; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
 .field { margin-bottom: var(--space-3); display: flex; flex-direction: column; gap: 4px; }
 .field label { font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-mahogany); }
+
+.pwa-install-btn {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0.65rem 1rem;
+  background: var(--color-gold);
+  color: var(--color-ink);
+  border: none;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: var(--shadow-book);
+  z-index: 120;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.pwa-install-btn.visible { display: inline-flex; }
+.pwa-install-btn:hover { background: var(--color-gold-bright); transform: translateY(-2px); }
+
+@media (max-width: 640px) {
+  .pwa-install-btn { right: var(--space-3); bottom: var(--space-3); padding: 0.55rem 0.85rem; }
+}
 
 .toast {
   position: fixed; bottom: var(--space-4); right: var(--space-4);
@@ -500,14 +592,45 @@ button, input, select, textarea { font-family: inherit; }
 /* =========================================================
    ACCIONES Y ESTADO DEL LOMO DEL LIBRO
    ========================================================= */
-.spine-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; z-index: 3; }
-.spine-menu {
-  opacity: 0.55; background: rgba(0,0,0,0.35); border: none; color: var(--color-parchment);
-  border-radius: 4px; width: 20px; height: 20px; cursor: pointer;
-  transition: opacity 0.15s ease;
+/* Barra de acciones (editar / mas opciones): flota ARRIBA del lomo del
+   libro en lugar de ir apretada dentro de el, para no congestionar la
+   portada. En escritorio aparece al pasar el mouse; en tactil (donde no
+   existe "hover") queda siempre visible para poder tocarla directamente. */
+.spine-actions {
+  position: absolute;
+  top: -30px;
+  right: -2px;
+  display: flex;
+  gap: 3px;
+  z-index: 5;
+  padding: 3px;
+  background: rgba(42,29,20,0.92);
+  border-radius: 7px;
+  box-shadow: var(--shadow-panel);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
-.book-spine:hover .spine-menu,
-.book-spine:focus-within .spine-menu { opacity: 1; }
+.book-spine:hover .spine-actions,
+.book-spine:focus-within .spine-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.spine-menu {
+  background: transparent; border: none; color: var(--color-parchment);
+  border-radius: 4px; width: 24px; height: 24px; cursor: pointer;
+  display: grid; place-items: center;
+}
+.spine-menu:hover { color: var(--color-gold-bright); }
+
+@media (hover: none) {
+  /* Sin hover disponible: la barra de acciones queda siempre visible y
+     con objetivos de toque un poco mas grandes. */
+  .spine-actions { opacity: 1; transform: none; pointer-events: auto; }
+  .spine-edit, .spine-menu { width: 28px; height: 28px; }
+}
 .spine-badge {
   position: absolute; top: 6px; left: 6px; z-index: 3;
   background: rgba(0,0,0,0.4); border-radius: 50%; width: 20px; height: 20px;
