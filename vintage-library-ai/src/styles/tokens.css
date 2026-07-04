@@ -16,6 +16,14 @@
   --color-burgundy: #6B2737;    /* enfasis, estados de error/atencion */
   --color-sage: #7C8B6F;        /* estado de exito, lectura completada */
 
+  /* Texto sobre superficies CLARAS que no cambian con el tema
+     (tarjetas de pergamino, modales, botones dorados). A diferencia
+     de --color-ink (que SI se redefine por tema mas abajo para el
+     texto "ambiente" que va directo sobre el fondo de <body>), este
+     token se queda fijo para que el contenido dentro de una tarjeta
+     nunca pierda contraste sin importar el tema de fondo elegido. */
+  --on-surface: #2A1D14;
+
   /* Tipografia */
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Source Serif 4', Georgia, serif;

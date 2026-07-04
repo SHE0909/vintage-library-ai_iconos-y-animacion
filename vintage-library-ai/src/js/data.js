@@ -20,5 +20,6 @@ export const {
   addBook, listBooks, getBook, updateBook, deleteBook, getBookFile,
   listCategories, addCategory, deleteCategory, setBookCover, getBookCover,
   addHighlight, listHighlights, deleteHighlight, updateHighlight, listFavoriteHighlights,
-  restoreHighlight
+  restoreHighlight,
+  recordReadingActivity, listReadingActivity, getReadingGoal, setReadingGoal
 } = adapter;

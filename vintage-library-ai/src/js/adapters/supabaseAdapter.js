@@ -100,7 +100,9 @@ export async function addBook({ title, author, category, file, coverImage, cover
     has_cover: !!coverImage,
     cover_preset: coverImage ? null : (coverPreset || null),
     archived: false,
-    finished: false
+    finished: false,
+    finished_at: null,
+    last_opened_at: null
   };
 
   const { data, error } = await supabase.from('books').insert(bookData).select().single();
@@ -181,7 +183,9 @@ function mapBook(row) {
     hasCover: row.has_cover,
     coverPreset: row.cover_preset,
     archived: row.archived,
-    finished: row.finished
+    finished: row.finished,
+    finishedAt: row.finished_at,
+    lastOpenedAt: row.last_opened_at
   };
 }
 
@@ -189,7 +193,8 @@ function toDbBook(patch) {
   const map = {
     ownerId: 'owner_id', addedAt: 'added_at', progressPage: 'progress_page',
     bookmarkPage: 'bookmark_page', totalPages: 'total_pages', spineColor: 'spine_color',
-    fileName: 'file_name', hasCover: 'has_cover', coverPreset: 'cover_preset'
+    fileName: 'file_name', hasCover: 'has_cover', coverPreset: 'cover_preset',
+    finishedAt: 'finished_at', lastOpenedAt: 'last_opened_at'
   };
   const out = {};
   for (const [key, value] of Object.entries(patch)) {
@@ -306,6 +311,46 @@ export async function listFavoriteHighlights(userId) {
 export async function deleteHighlight(highlightId) {
   const { error } = await supabase.from('highlights').delete().eq('id', highlightId);
   if (error) throw error;
+}
+
+// ---------------- ACTIVIDAD DE LECTURA (racha, minutos, calendario) ----------------
+export async function recordReadingActivity({ minutes = 0, pages = 0 } = {}) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: existing, error: readErr } = await supabase
+    .from('reading_activity')
+    .select('minutes,pages')
+    .eq('user_id', currentUser.id)
+    .eq('date', today)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  const nextMinutes = (existing?.minutes || 0) + Math.max(0, minutes);
+  const nextPages = Math.max(existing?.pages || 0, pages);
+  const { error } = await supabase
+    .from('reading_activity')
+    .upsert({ user_id: currentUser.id, date: today, minutes: nextMinutes, pages: nextPages }, { onConflict: 'user_id,date' });
+  if (error) throw error;
+  return { date: today, minutes: nextMinutes, pages: nextPages };
+}
+
+export async function listReadingActivity(userId) {
+  const { data, error } = await supabase.from('reading_activity').select('*').eq('user_id', userId);
+  if (error) throw error;
+  return data.map((r) => ({ date: r.date, minutes: r.minutes || 0, pages: r.pages || 0 }));
+}
+
+// ---------------- META DE LECTURA ----------------
+export async function getReadingGoal(userId) {
+  const { data, error } = await supabase.from('reading_goals').select('target').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data?.target ?? null;
+}
+
+export async function setReadingGoal(userId, target) {
+  const { error } = await supabase.from('reading_goals').upsert({ user_id: userId, target }, { onConflict: 'user_id' });
+  if (error) throw error;
+  return target;
 }
 
 function mapHighlight(row) {

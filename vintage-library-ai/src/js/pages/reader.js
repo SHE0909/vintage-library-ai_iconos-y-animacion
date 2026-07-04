@@ -2,7 +2,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import {
   getBookFile, getBook, updateBook, getCurrentUser,
-  addHighlight, listHighlights, deleteHighlight, updateHighlight, restoreHighlight
+  addHighlight, listHighlights, deleteHighlight, updateHighlight, restoreHighlight,
+  recordReadingActivity
 } from '../data.js';
 import { el, showToast, showLoadingOverlay, hideLoadingOverlay, showMenu } from '../utils.js';
 import { icon } from '../icons.js';
@@ -41,12 +42,14 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   const bookmarkBtn = el('button', { class: 'icon reader-bookmark-btn', type: 'button' }, [bookmarkIcon, bookmarkLabel]);
   const searchBtn = el('button', { class: 'icon icon-round', type: 'button', title: 'Buscar texto' }, icon('search', { size: 16 }));
   const favPanelBtn = el('button', { class: 'icon icon-round', type: 'button', title: 'Frases guardadas de este libro' }, icon('starOutline', { size: 16 }));
+  const noteBtn = el('button', { class: 'icon reader-note-btn', type: 'button', title: 'Agregar nota en esta pagina' }, [icon('edit', { size: 15 }), el('span', { class: 'icn-label' }, 'Nota')]);
+  const notesPanelBtn = el('button', { class: 'icon icon-round', type: 'button', title: 'Notas de este libro' }, icon('edit', { size: 15 }));
 
   bookmarkBtn.setAttribute('title', 'Marcar esta pagina');
 
   const toolbar = el('div', { class: 'reader-toolbar' }, [
     el('div', { class: 'group group-back' }, [
-      el('button', { class: 'icon reader-back-btn', title: 'Volver a la estanteria', onClick: () => navigate('#/dashboard') }, [icon('arrowLeft', { size: 15 }), el('span', { class: 'icn-label' }, 'Volver a la estanteria')])
+      el('button', { class: 'icon reader-back-btn', title: 'Volver a la estanteria', onClick: async () => { await leaveReaderAndCommit(); navigate('#/dashboard'); } }, [icon('arrowLeft', { size: 15 }), el('span', { class: 'icn-label' }, 'Volver a la estanteria')])
     ]),
     el('div', { class: 'group reader-pager' }, [
       el('button', { class: 'page-turn-btn', id: 'prev-page', title: 'Pagina anterior' }, icon('chevronLeft', { size: 17 })),
@@ -55,9 +58,11 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     ]),
     el('div', { class: 'group group-tools' }, [
       bookmarkBtn,
+      noteBtn,
       el('span', { class: 'toolbar-divider', 'aria-hidden': 'true' }),
       searchBtn,
       favPanelBtn,
+      notesPanelBtn,
       el('span', { class: 'toolbar-divider', 'aria-hidden': 'true' }),
       el('button', { class: 'icon icon-round', id: 'zoom-out', title: 'Alejar' }, icon('zoomOut', { size: 15 })),
       el('button', { class: 'icon icon-round', id: 'zoom-in', title: 'Acercar' }, icon('zoomIn', { size: 15 }))
@@ -143,7 +148,38 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
   }
   pageNum = Math.min(Math.max(pageNum, 1), pdfDoc.numPages);
 
-  await updateBook(bookId, { totalPages: pdfDoc.numPages });
+  await updateBook(bookId, { totalPages: pdfDoc.numPages, lastOpenedAt: new Date().toISOString() });
+
+  // ---------------- SESION DE LECTURA (racha, minutos, calendario) ----------------
+  // No guardamos nada hasta que el usuario efectivamente pasa tiempo o
+  // paginas en el libro; se registra periodicamente y al salir para que
+  // una sesion larga no se pierda si el usuario cierra la pestaña sin avisar.
+  let sessionStart = Date.now();
+  let sessionPagesSeen = new Set([pageNum]);
+  let sessionCommitted = false;
+
+  async function commitReadingSession() {
+    const elapsedMinutes = Math.round((Date.now() - sessionStart) / 60000);
+    const pagesSeen = sessionPagesSeen.size;
+    if (elapsedMinutes <= 0 && pagesSeen <= 1) return; // nada relevante que guardar aun
+    sessionStart = Date.now();
+    sessionPagesSeen = new Set([pageNum]);
+    try { await recordReadingActivity({ minutes: elapsedMinutes, pages: pagesSeen }); } catch { /* modo offline: no interrumpe la lectura */ }
+  }
+
+  const activityTimer = setInterval(() => {
+    if (!document.body.contains(shell)) { clearInterval(activityTimer); return; }
+    commitReadingSession();
+  }, 60000);
+
+  async function leaveReaderAndCommit() {
+    if (sessionCommitted) return;
+    sessionCommitted = true;
+    clearInterval(activityTimer);
+    await commitReadingSession();
+  }
+
+  window.addEventListener('beforeunload', leaveReaderAndCommit);
 
   function updateBookmarkBtnState() {
     const active = bookRecord && bookRecord.bookmarkPage === pageNum;
@@ -199,6 +235,7 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     pageIndicator.textContent = `Pagina ${num} de ${pdfDoc.numPages}`;
     await drawHighlights(num, viewport.width, viewport.height);
     rendering = false;
+    sessionPagesSeen.add(num);
     updateBook(bookId, { progressPage: num }).catch(() => {});
     updateBookmarkBtnState();
 
@@ -513,12 +550,103 @@ export async function renderReader(root, { bookId, initialPage, navigate }) {
     });
   }
 
+  // ---------------- NOTAS DE TEXTO LIBRE ----------------
+  // A diferencia de los resaltados (que nacen de seleccionar texto del
+  // PDF), una nota es un pensamiento propio del lector, sin texto de
+  // origen. Reusa la misma tabla/almacen que los resaltados con
+  // kind:'note', asi el resto de la infraestructura (deshacer, borrar,
+  // sincronizacion) ya funciona sin cambios.
+  let currentSidePanelTab = null;
+
+  function openNoteEditor(existingNote = null) {
+    const backdrop = el('div', { class: 'modal-backdrop' });
+    const textarea = el('textarea', { class: 'input note-textarea', rows: '5', placeholder: 'Escribe tu nota para esta pagina...' }, existingNote ? existingNote.text : '');
+    const saveBtn = el('button', { class: 'btn btn-gold', type: 'submit' }, existingNote ? 'Guardar cambios' : 'Agregar nota');
+    const deleteBtn = existingNote ? el('button', {
+      class: 'btn btn-danger', type: 'button',
+      onClick: async () => {
+        if (!confirm('¿Eliminar esta nota?')) return;
+        await commitErase(existingNote);
+        backdrop.remove();
+        showToast('Nota eliminada.');
+        if (currentSidePanelTab === 'notes') openSidePanel('notes');
+      }
+    }, 'Eliminar') : null;
+
+    const form = el('form', {}, [
+      textarea,
+      el('div', { style: 'display:flex; gap:8px; justify-content:flex-end; margin-top:10px;' }, [
+        deleteBtn,
+        el('button', { type: 'button', class: 'btn btn-ghost', onClick: () => backdrop.remove() }, 'Cancelar'),
+        saveBtn
+      ])
+    ]);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = textarea.value.trim();
+      if (!text) { showToast('Escribe algo antes de guardar.'); return; }
+      if (existingNote) {
+        await updateHighlight(existingNote.id, { text });
+        showToast('Nota actualizada.');
+      } else {
+        const record = await addHighlight({ bookId, page: pageNum, kind: 'note', text, rects: [], color: '#B08A4E' });
+        await commitAdd(record);
+        showToast('Nota guardada en esta pagina.');
+      }
+      backdrop.remove();
+      if (currentSidePanelTab === 'notes') openSidePanel('notes');
+    });
+
+    backdrop.appendChild(el('div', { class: 'modal panel' }, [
+      el('div', { class: 'modal-header' }, [
+        el('h2', {}, existingNote ? 'Editar nota' : `Nueva nota — pagina ${pageNum}`),
+        el('button', { class: 'btn btn-ghost btn-sm modal-close', type: 'button', onClick: () => backdrop.remove() }, icon('close', { size: 15 }))
+      ]),
+      form
+    ]));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+    document.body.appendChild(backdrop);
+    setTimeout(() => textarea.focus(), 50);
+  }
+
+  noteBtn.addEventListener('click', () => openNoteEditor());
+  notesPanelBtn.addEventListener('click', () => openSidePanel('notes'));
+
   function openSidePanel(tab) {
+    currentSidePanelTab = tab;
     sidePanel.classList.add('open');
     const title = document.getElementById('side-panel-title');
     const body = document.getElementById('side-panel-body');
     body.innerHTML = '';
-    if (tab === 'search') {
+    if (tab === 'notes') {
+      title.innerHTML = '';
+      title.appendChild(icon('edit', { size: 15 }));
+      title.appendChild(el('span', {}, 'Notas de este libro'));
+      body.appendChild(el('p', { class: 'empty-shelf' }, 'Cargando...'));
+      listHighlights(bookId).then((all) => {
+        const notes = all.filter((h) => h.kind === 'note').sort((a, b) => a.page - b.page);
+        body.innerHTML = '';
+        body.appendChild(el('button', {
+          class: 'btn btn-ghost btn-sm', type: 'button', style: 'margin-bottom:10px;',
+          onClick: () => openNoteEditor()
+        }, [icon('plus', { size: 13 }), el('span', {}, `Nota en pagina ${pageNum}`)]));
+        if (notes.length === 0) {
+          body.appendChild(el('p', { class: 'empty-shelf' }, 'Aun no tienes notas en este libro. Usa el boton "Nota" en la barra superior.'));
+          return;
+        }
+        notes.forEach((n) => {
+          const card = el('div', { class: 'side-panel-result', style: 'border-left: 3px solid var(--color-gold);' }, [
+            el('p', { class: 'side-panel-result-snippet' }, n.text),
+            el('div', { class: 'saved-phrase-meta' }, [
+              el('span', { class: 'side-panel-result-page' }, `Pagina ${n.page}`),
+              el('button', { class: 'link', type: 'button', onClick: (e) => { e.stopPropagation(); openNoteEditor(n); } }, 'Editar')
+            ])
+          ]);
+          card.addEventListener('click', () => { pageNum = n.page; renderPage(pageNum, { animate: true }); });
+          body.appendChild(card);
+        });
+      });
+    } else if (tab === 'search') {
       title.textContent = 'Buscar en el libro';
       const input = el('input', { class: 'input', placeholder: 'Buscar palabra o frase...' });
       const form = el('form', { class: 'side-panel-search-form' }, [

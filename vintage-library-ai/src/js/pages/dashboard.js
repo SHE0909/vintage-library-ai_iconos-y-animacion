@@ -1,13 +1,20 @@
 import {
   listBooks, addBook, updateBook, deleteBook, signOut, getCurrentUser,
   listCategories, addCategory, deleteCategory, getBookCover, setBookCover,
-  listFavoriteHighlights, getBookFile
+  listFavoriteHighlights, getBookFile, listHighlights,
+  listReadingActivity, getReadingGoal, setReadingGoal
 } from '../data.js';
 import { el, showToast, showMenu, iconBtn } from '../utils.js';
 import { icon } from '../icons.js';
 import { COVER_PRESETS, getCoverPreset } from '../coverPresets.js';
 import { generatePdfCoverThumbnail } from '../pdfThumbnail.js';
 import { BG_THEMES, getStoredTheme, applyTheme } from '../theme.js';
+import { searchBooks as searchOpenLibrary, fetchCoverBlob } from '../openLibrary.js';
+import {
+  computeStreak, minutesToday, minutesThisWeek, buildActivityCalendar,
+  avgPagesPerDay, favoriteCategory, favoriteAuthor, mostHighlightedBook,
+  booksFinishedThisYear, computeAchievements
+} from '../stats.js';
 
 const DEFAULT_CATEGORIES = ['Favoritos', 'Pendientes', 'General'];
 const NEW_CATEGORY_VALUE = '__new__';
@@ -218,6 +225,8 @@ async function drawContent(content, user, categories, navigate, refresh, selectS
 
   if (selectState.active) {
     content.appendChild(bulkActionBar(selectState, allBooks, refresh, redrawContent));
+  } else {
+    content.appendChild(await buildInsightsSection(user, allBooks, navigate, refresh));
   }
 
   const byCategory = groupBy(books, (b) => b.category || 'General');
@@ -247,7 +256,7 @@ function bulkActionBar(selectState, allBooks, refresh, redrawContent) {
       el('button', {
         class: 'btn btn-ghost btn-sm', type: 'button', disabled: isEmpty,
         onClick: async () => {
-          for (const b of selectedBooks) await updateBook(b.id, { finished: true });
+          for (const b of selectedBooks) await updateBook(b.id, { finished: true, finishedAt: new Date().toISOString() });
           showToast('Marcados como terminados.');
           selectState.active = false; selectState.ids.clear();
           await refresh();
@@ -327,7 +336,12 @@ function bookSpine(book, navigate, refresh, categories, user, selectState, redra
         {
           icon: book.finished ? 'checkCircle' : 'checkCircle',
           label: book.finished ? 'Quitar marca de terminado' : 'Marcar como terminado',
-          onClick: async () => { await updateBook(book.id, { finished: !book.finished }); showToast(book.finished ? 'Marca quitada.' : '¡Felicidades por terminarlo!'); refresh(); }
+          onClick: async () => {
+            const nowFinished = !book.finished;
+            await updateBook(book.id, { finished: nowFinished, finishedAt: nowFinished ? new Date().toISOString() : null });
+            showToast(book.finished ? 'Marca quitada.' : '¡Felicidades por terminarlo!');
+            refresh();
+          }
         },
         {
           icon: 'archive',
@@ -369,7 +383,7 @@ function bookSpine(book, navigate, refresh, categories, user, selectState, redra
     selectMode ? selectCheckbox : el('div', { class: 'spine-actions' }, [editBtn, menuBtn]),
     book.finished ? el('span', { class: 'spine-badge', title: 'Terminado' }, icon('checkCircle', { size: 12 })) : null,
     book.bookmarkPage ? el('span', { class: 'spine-badge spine-badge-pin', title: 'Tienes un marcador guardado' }, icon('pin', { size: 12 })) : null,
-    el('div', {}, [
+    el('div', { class: 'spine-text-block' }, [
       el('div', { class: 'spine-title' }, book.title),
       el('div', { class: 'spine-author' }, book.author)
     ]),
@@ -391,6 +405,142 @@ function bookSpine(book, navigate, refresh, categories, user, selectState, redra
   }
 
   return spine;
+}
+
+// ---------------------------------------------------------
+// "Continuar leyendo", racha, meta de lectura, calendario de
+// actividad, logros y estadisticas — todo lo que hace que la
+// biblioteca se sienta "viva" ademas de ser un catalogo.
+// ---------------------------------------------------------
+async function buildInsightsSection(user, allBooks, navigate, refresh) {
+  const [activity, goal, favorites, highlightsPerBook] = await Promise.all([
+    listReadingActivity(user.id),
+    getReadingGoal(user.id),
+    listFavoriteHighlights(user.id),
+    Promise.all(allBooks.map((b) => listHighlights(b.id).then((hs) => [b.id, hs])))
+  ]);
+
+  const highlightsByBook = {};
+  let notesCount = 0;
+  highlightsPerBook.forEach(([bookId, hs]) => {
+    highlightsByBook[bookId] = hs.length;
+    notesCount += hs.filter((h) => h.kind === 'note').length;
+  });
+
+  const streak = computeStreak(activity);
+  const calendar = buildActivityCalendar(activity);
+  const achievements = computeAchievements({ books: allBooks, favoritesCount: favorites.length, notesCount, streak });
+  const finishedThisYear = booksFinishedThisYear(allBooks);
+
+  const continueBook = allBooks
+    .filter((b) => !b.archived && !b.finished && b.lastOpenedAt)
+    .sort((a, b) => new Date(b.lastOpenedAt) - new Date(a.lastOpenedAt))[0] || null;
+
+  const wrap = el('div', { class: 'dash-insights' });
+
+  if (continueBook) wrap.appendChild(continueReadingCard(continueBook, navigate));
+
+  wrap.appendChild(el('div', { class: 'insights-grid' }, [
+    streakGoalCard(streak, activity, goal, finishedThisYear, user, refresh),
+    statsCard({
+      favCat: favoriteCategory(allBooks),
+      favAuthor: favoriteAuthor(allBooks),
+      mostHighlighted: mostHighlightedBook(highlightsByBook, allBooks),
+      avgPages: avgPagesPerDay(activity)
+    }),
+    achievementsCard(achievements)
+  ]));
+
+  wrap.appendChild(activityCalendarCard(calendar));
+
+  return wrap;
+}
+
+function continueReadingCard(book, navigate) {
+  const startPage = book.bookmarkPage || book.progressPage || 1;
+  const pct = book.totalPages ? Math.round((book.progressPage / book.totalPages) * 100) : 0;
+  return el('div', {
+    class: 'continue-reading-card', role: 'button', tabindex: '0',
+    onClick: () => navigate(`#/read/${book.id}/${startPage}`)
+  }, [
+    el('div', { class: 'continue-reading-icon' }, icon('book', { size: 22 })),
+    el('div', { class: 'continue-reading-info' }, [
+      el('p', { class: 'eyebrow' }, 'Continuar leyendo'),
+      el('h3', {}, book.title),
+      el('p', { class: 'continue-reading-author' }, book.author),
+      book.totalPages ? el('div', { class: 'spine-progress continue-reading-progress' }, [el('i', { style: `width:${pct}%` })]) : null
+    ]),
+    el('button', { class: 'btn btn-gold btn-sm', type: 'button' }, [el('span', {}, 'Seguir'), icon('arrowRight', { size: 13 })])
+  ]);
+}
+
+function streakGoalCard(streak, activity, goal, finishedThisYear, user, refresh) {
+  const target = goal || 12;
+  const pct = Math.min(100, Math.round((finishedThisYear / target) * 100));
+  return el('div', { class: 'insight-card' }, [
+    el('p', { class: 'eyebrow' }, 'Racha de lectura'),
+    el('div', { class: 'streak-row' }, [
+      icon('leaf', { size: 20, className: 'streak-icon' }),
+      el('div', {}, [
+        el('b', { class: 'streak-number' }, String(streak.current)),
+        el('span', {}, ` dia${streak.current === 1 ? '' : 's'} seguidos`)
+      ])
+    ]),
+    el('p', { class: 'insight-subtext' }, `${minutesToday(activity)} min hoy · ${minutesThisWeek(activity)} min esta semana · racha mas larga: ${streak.longest} dias`),
+    el('hr', { class: 'insight-divider' }),
+    el('p', { class: 'eyebrow' }, `Meta anual: ${finishedThisYear} / ${target} libros`),
+    el('div', { class: 'goal-progress' }, [el('i', { style: `width:${pct}%` })]),
+    el('button', {
+      class: 'link', type: 'button', style: 'margin-top:6px;',
+      onClick: async () => {
+        const input = prompt('¿Cuantos libros quieres terminar este año?', String(target));
+        if (input === null) return;
+        const n = parseInt(input, 10);
+        if (!n || n < 1) { showToast('Escribe un numero valido.'); return; }
+        await setReadingGoal(user.id, n);
+        showToast('Meta actualizada.');
+        refresh();
+      }
+    }, 'Cambiar meta')
+  ]);
+}
+
+function statsCard({ favCat, favAuthor, mostHighlighted, avgPages }) {
+  const rows = [];
+  if (favCat) rows.push(`Estanteria favorita: ${favCat.name} (${favCat.count})`);
+  if (favAuthor) rows.push(`Autor mas leido: ${favAuthor.name} (${favAuthor.count})`);
+  if (mostHighlighted) rows.push(`Libro mas remarcado: "${mostHighlighted.book.title}" (${mostHighlighted.count})`);
+  if (avgPages > 0) rows.push(`Promedio de lectura: ${avgPages} paginas/dia`);
+  return el('div', { class: 'insight-card' }, [
+    el('p', { class: 'eyebrow' }, 'Estadisticas'),
+    rows.length === 0
+      ? el('p', { class: 'insight-subtext' }, 'Sigue leyendo para desbloquear estadisticas.')
+      : el('ul', { class: 'stats-list' }, rows.map((r) => el('li', {}, r)))
+  ]);
+}
+
+function achievementsCard(achievements) {
+  return el('div', { class: 'insight-card' }, [
+    el('p', { class: 'eyebrow' }, 'Logros'),
+    el('div', { class: 'achievements-grid' }, achievements.map((a) => el('div', {
+      class: `achievement-badge${a.unlocked ? ' unlocked' : ''}`,
+      title: a.label
+    }, [icon(a.icon, { size: 15 }), el('span', {}, a.label)])))
+  ]);
+}
+
+function activityCalendarCard(calendar) {
+  const weeks = [];
+  for (let i = 0; i < calendar.length; i += 7) weeks.push(calendar.slice(i, i + 7));
+  const grid = el('div', { class: 'activity-calendar' }, weeks.map((week) => el('div', { class: 'activity-week' },
+    week.map((day) => el('span', {
+      class: `activity-day level-${day.level}`,
+      title: `${day.date}: ${day.minutes} min de lectura`
+    })))));
+  return el('div', { class: 'insight-card activity-calendar-card' }, [
+    el('p', { class: 'eyebrow' }, 'Actividad de lectura (ultimas semanas)'),
+    grid
+  ]);
 }
 
 function computeStats(books) {
@@ -447,9 +597,18 @@ function coverPicker(existingBook) {
     el('p', { class: 'cover-picker-hint' }, 'Usaremos la primera pagina del PDF como portada, tal como aparece en el libro. Puedes cambiarla cuando quieras.')
   ]);
 
+  let externalCoverBlob = null;
+  const externalCoverHint = el('p', { class: 'cover-picker-hint', style: 'display:none;' });
   const uploadSection = el('div', { class: 'cover-picker-section', style: 'display:none;' }, [
-    el('input', { class: 'input', type: 'file', name: 'coverImage', accept: 'image/*' })
+    el('input', { class: 'input', type: 'file', name: 'coverImage', accept: 'image/*' }),
+    externalCoverHint
   ]);
+  uploadSection.querySelector('input[type=file]').addEventListener('change', () => {
+    // Si el usuario elige un archivo propio, ya no usamos la portada
+    // que se haya traido de Open Library.
+    externalCoverBlob = null;
+    externalCoverHint.style.display = 'none';
+  });
 
   let selectedPreset = existingBook?.coverPreset || null;
   const presetGrid = el('div', { class: 'cover-preset-grid' });
@@ -486,9 +645,76 @@ function coverPicker(existingBook) {
   return {
     node: wrap,
     getMode: () => (wrap.querySelector('input[name="coverMode"]:checked')?.value || 'auto'),
-    getFile: () => uploadSection.querySelector('input[type=file]').files[0],
-    getPreset: () => (presetGrid.dataset.value || null)
+    getFile: () => externalCoverBlob || uploadSection.querySelector('input[type=file]').files[0],
+    getPreset: () => (presetGrid.dataset.value || null),
+    // Usado por la busqueda de Open Library: fuerza el modo "Subir imagen"
+    // con una portada ya descargada, sin que el usuario tenga que elegir
+    // un archivo de su computadora.
+    setExternalCover: (blob, label) => {
+      externalCoverBlob = blob;
+      externalCoverHint.textContent = `Portada de Open Library seleccionada: ${label}`;
+      externalCoverHint.style.display = 'block';
+      const uploadRadio = wrap.querySelector('input[name="coverMode"][value="upload"]');
+      if (uploadRadio) { uploadRadio.checked = true; uploadRadio.dispatchEvent(new Event('change')); }
+    }
   };
+}
+
+function openLibrarySearchField(titleInput, authorInput, cover) {
+  const input = el('input', { class: 'input', placeholder: 'Buscar por titulo (ej: El nombre del viento)...' });
+  const searchBtn = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [icon('search', { size: 13 }), el('span', {}, 'Buscar')]);
+  const resultsBox = el('div', { class: 'ol-results' });
+
+  async function runOlSearch() {
+    const q = input.value.trim();
+    if (!q) return;
+    resultsBox.innerHTML = '';
+    resultsBox.appendChild(el('p', { class: 'empty-shelf' }, 'Buscando en Open Library...'));
+    try {
+      const results = await searchOpenLibrary(q, 6);
+      resultsBox.innerHTML = '';
+      if (results.length === 0) {
+        resultsBox.appendChild(el('p', { class: 'empty-shelf' }, 'Sin resultados. Puedes escribir los datos a mano.'));
+        return;
+      }
+      results.forEach((r) => {
+        const row = el('button', { class: 'ol-result-row', type: 'button' }, [
+          r.coverUrl ? el('img', { src: r.coverUrl, class: 'ol-result-cover', alt: '' }) : el('span', { class: 'ol-result-cover ol-result-cover-empty' }, icon('book', { size: 14 })),
+          el('span', { class: 'ol-result-text' }, [
+            el('span', { class: 'ol-result-title' }, r.title),
+            el('span', { class: 'ol-result-author' }, `${r.author}${r.year ? ' · ' + r.year : ''}`)
+          ])
+        ]);
+        row.addEventListener('click', async () => {
+          titleInput.value = r.title;
+          authorInput.value = r.author;
+          resultsBox.innerHTML = '';
+          resultsBox.appendChild(el('p', { class: 'empty-shelf' }, 'Descargando portada...'));
+          const blob = await fetchCoverBlob(r.coverUrlLarge);
+          resultsBox.innerHTML = '';
+          if (blob) {
+            cover.setExternalCover(blob, r.title);
+            showToast('Titulo, autor y portada rellenados desde Open Library.');
+          } else {
+            showToast('Titulo y autor rellenados. No habia portada disponible.');
+          }
+        });
+        resultsBox.appendChild(row);
+      });
+    } catch {
+      resultsBox.innerHTML = '';
+      resultsBox.appendChild(el('p', { class: 'empty-shelf' }, 'No se pudo buscar en Open Library ahora mismo.'));
+    }
+  }
+
+  searchBtn.addEventListener('click', runOlSearch);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runOlSearch(); } });
+
+  return el('div', { class: 'field ol-search-field' }, [
+    el('label', {}, [icon('search', { size: 12 }), el('span', {}, ' Autocompletar con Open Library (opcional)')]),
+    el('div', { class: 'ol-search-row' }, [input, searchBtn]),
+    resultsBox
+  ]);
 }
 
 function openBookModal({ categories, user, existingBook, onSaved }) {
@@ -497,22 +723,26 @@ function openBookModal({ categories, user, existingBook, onSaved }) {
   const { select: catSelect, newCatInput } = categorySelect(categories, existingBook?.category);
   const cover = coverPicker(existingBook);
 
+  const titleInput = el('input', { class: 'input', name: 'title', value: existingBook?.title || '', placeholder: 'El nombre del viento' });
+  const authorInput = el('input', { class: 'input', name: 'author', value: existingBook?.author || '', placeholder: 'Patrick Rothfuss' });
+
   const fields = [
     !isEdit ? el('div', { class: 'field' }, [
       el('label', {}, 'Archivo PDF'),
       el('input', { class: 'input', type: 'file', name: 'file', accept: 'application/pdf', required: 'true' })
     ]) : null,
+    !isEdit ? openLibrarySearchField(titleInput, authorInput, cover) : null,
     el('div', { class: 'field' }, [
       el('label', {}, 'Portada (opcional)'),
       cover.node
     ]),
     el('div', { class: 'field' }, [
       el('label', {}, 'Titulo'),
-      el('input', { class: 'input', name: 'title', value: existingBook?.title || '', placeholder: 'El nombre del viento' })
+      titleInput
     ]),
     el('div', { class: 'field' }, [
       el('label', {}, 'Autor'),
-      el('input', { class: 'input', name: 'author', value: existingBook?.author || '', placeholder: 'Patrick Rothfuss' })
+      authorInput
     ]),
     el('div', { class: 'field' }, [
       el('label', {}, 'Categoria / estanteria'),
@@ -618,14 +848,38 @@ function openBookModal({ categories, user, existingBook, onSaved }) {
   document.body.appendChild(backdrop);
 }
 
+function exportPhrasesToMarkdown(phrases, titleFor) {
+  const lines = ['# Frases guardadas', '', `_Exportado el ${new Date().toLocaleDateString()}_`, ''];
+  const byBook = groupBy(phrases, (p) => titleFor(p.bookId));
+  Object.entries(byBook).forEach(([title, list]) => {
+    lines.push(`## ${title}`, '');
+    list.forEach((p) => {
+      lines.push(`> ${p.text}`, '', `— pagina ${p.page}`, '');
+    });
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: 'frases-guardadas.md' });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function openSavedPhrasesModal(user, navigate) {
   const backdrop = el('div', { class: 'modal-backdrop' });
   const listWrap = el('div', { class: 'saved-phrases-list' }, [el('p', { class: 'empty-shelf' }, 'Cargando...')]);
+  const exportBtn = el('button', {
+    class: 'btn btn-ghost btn-sm', type: 'button', title: 'Exportar todas las frases a un archivo Markdown', disabled: 'true'
+  }, [icon('download', { size: 13 }), el('span', { class: 'icn-label' }, 'Exportar')]);
 
   backdrop.appendChild(el('div', { class: 'modal panel saved-phrases-modal' }, [
     el('div', { class: 'modal-header' }, [
       el('h2', {}, [icon('starFilled', { size: 18 }), el('span', {}, 'Frases guardadas')]),
-      el('button', { class: 'btn btn-ghost btn-sm modal-close', type: 'button', onClick: () => backdrop.remove() }, icon('close', { size: 15 }))
+      el('div', { style: 'display:flex; gap:8px; align-items:center;' }, [
+        exportBtn,
+        el('button', { class: 'btn btn-ghost btn-sm modal-close', type: 'button', onClick: () => backdrop.remove() }, icon('close', { size: 15 }))
+      ])
     ]),
     listWrap
   ]));
@@ -634,6 +888,11 @@ async function openSavedPhrasesModal(user, navigate) {
 
   const [phrases, books] = await Promise.all([listFavoriteHighlights(user.id), listBooks(user.id)]);
   const titleFor = (bookId) => books.find((b) => b.id === bookId)?.title || 'Libro';
+
+  if (phrases.length > 0) {
+    exportBtn.removeAttribute('disabled');
+    exportBtn.addEventListener('click', () => exportPhrasesToMarkdown(phrases, titleFor));
+  }
 
   listWrap.innerHTML = '';
   if (phrases.length === 0) {

@@ -21,6 +21,12 @@ const LS_BOOKS = 'vl_books';
 const LS_SESSION = 'vl_session';
 const LS_CATEGORIES = 'vl_categories';
 const LS_HIGHLIGHTS = 'vl_highlights';
+const LS_ACTIVITY = 'vl_activity';
+const LS_GOALS = 'vl_goals';
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 let authListeners = [];
 
@@ -162,7 +168,9 @@ export async function addBook({ title, author, category, file, coverImage, cover
     hasCover: !!coverImage,
     coverPreset: coverImage ? null : (coverPreset || null),
     archived: false,
-    finished: false
+    finished: false,
+    finishedAt: null,
+    lastOpenedAt: null
   };
   if (file) {
     await idbPut(book.id, file);
@@ -308,4 +316,42 @@ export async function listFavoriteHighlights(userId) {
 export async function deleteHighlight(highlightId) {
   const highlights = readLS(LS_HIGHLIGHTS, []).filter((h) => h.id !== highlightId);
   writeLS(LS_HIGHLIGHTS, highlights);
+}
+
+// ---------------- ACTIVIDAD DE LECTURA (racha, minutos, calendario) ----------------
+// Suma minutos/paginas al dia de hoy para el usuario actual. Se llama
+// periodicamente y al salir del lector (ver reader.js), nunca reemplaza
+// el dia completo, solo lo incrementa.
+export async function recordReadingActivity({ minutes = 0, pages = 0 } = {}) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return null;
+  const all = readLS(LS_ACTIVITY, {});
+  const userMap = all[currentUser.id] || {};
+  const today = todayStr();
+  const entry = userMap[today] || { minutes: 0, pages: 0 };
+  entry.minutes += Math.max(0, minutes);
+  entry.pages = Math.max(entry.pages, pages);
+  userMap[today] = entry;
+  all[currentUser.id] = userMap;
+  writeLS(LS_ACTIVITY, all);
+  return { date: today, ...entry };
+}
+
+export async function listReadingActivity(userId) {
+  const all = readLS(LS_ACTIVITY, {});
+  const userMap = all[userId] || {};
+  return Object.entries(userMap).map(([date, v]) => ({ date, minutes: v.minutes || 0, pages: v.pages || 0 }));
+}
+
+// ---------------- META DE LECTURA ----------------
+export async function getReadingGoal(userId) {
+  const all = readLS(LS_GOALS, {});
+  return all[userId]?.target ?? null;
+}
+
+export async function setReadingGoal(userId, target) {
+  const all = readLS(LS_GOALS, {});
+  all[userId] = { target };
+  writeLS(LS_GOALS, all);
+  return target;
 }

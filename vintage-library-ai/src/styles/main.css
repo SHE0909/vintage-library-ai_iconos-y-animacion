@@ -31,6 +31,7 @@ body[data-theme="amaderado"] {
     repeating-linear-gradient(90deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 2px, transparent 2px, transparent 26px),
     repeating-linear-gradient(90deg, rgba(255,222,173,0.06) 0px, transparent 1px, transparent 13px),
     linear-gradient(100deg, #7a5232, #55371f 60%, #6b4426);
+  --color-ink: #F2E9D8;
 }
 body[data-theme="cuero"] {
   background: #3b2413;
@@ -39,6 +40,7 @@ body[data-theme="cuero"] {
     radial-gradient(circle at 80% 70%, rgba(0,0,0,0.3), transparent 40%),
     repeating-radial-gradient(circle at 50% 50%, rgba(0,0,0,0.05) 0, rgba(0,0,0,0.05) 1px, transparent 2px, transparent 5px),
     linear-gradient(160deg, #5c3a21, #2a1d14 85%);
+  --color-ink: #ECE2CC;
 }
 body[data-theme="marmol"] {
   background: #d9d2c2;
@@ -58,6 +60,42 @@ body[data-theme="nocturno"] {
     radial-gradient(ellipse at top, rgba(107,39,55,0.18), transparent 60%),
     linear-gradient(160deg, #1a1712, #0c0a08 80%);
   color: #ECE2CC;
+  --color-ink: #ECE2CC;
+}
+
+/* Texto secundario "ambiente" (iniciales/contadores/pistas que van
+   directo sobre el fondo de <body>, no dentro de una tarjeta): en
+   los temas oscuros el café/caoba original queda casi invisible,
+   asi que se aclara solo para estos temas. El texto que SI vive
+   dentro de tarjetas de pergamino (modal, panel lateral, etc.) no
+   se toca aqui porque ya esta cubierto por --on-surface mas abajo. */
+body[data-theme="amaderado"] .dash-stats,
+body[data-theme="amaderado"] .shelf-title .count,
+body[data-theme="amaderado"] .empty-shelf,
+body[data-theme="amaderado"] .shelf-group-archived .shelf-title h3,
+body[data-theme="amaderado"] .auth-card .tagline,
+body[data-theme="amaderado"] .auth-form label,
+body[data-theme="cuero"] .dash-stats,
+body[data-theme="cuero"] .shelf-title .count,
+body[data-theme="cuero"] .empty-shelf,
+body[data-theme="cuero"] .shelf-group-archived .shelf-title h3,
+body[data-theme="cuero"] .auth-card .tagline,
+body[data-theme="cuero"] .auth-form label,
+body[data-theme="nocturno"] .dash-stats,
+body[data-theme="nocturno"] .shelf-title .count,
+body[data-theme="nocturno"] .empty-shelf,
+body[data-theme="nocturno"] .shelf-group-archived .shelf-title h3,
+body[data-theme="nocturno"] .auth-card .tagline,
+body[data-theme="nocturno"] .auth-form label {
+  color: rgba(236,226,204,0.72);
+}
+.modal, .reader-side-panel, .music-panel {
+  color: var(--on-surface);
+}
+.modal h1, .modal h2, .modal h3,
+.reader-side-panel h1, .reader-side-panel h2, .reader-side-panel h3,
+.music-panel h1, .music-panel h2, .music-panel h3 {
+  color: var(--on-surface);
 }
 
 /* =========================================================
@@ -156,7 +194,7 @@ button, input, select, textarea { font-family: inherit; }
 .btn:hover { background: var(--color-mahogany-dark); transform: translateY(-1px); box-shadow: var(--shadow-book); }
 .btn:active { transform: translateY(0); }
 .btn:focus-visible { outline: 2px solid var(--color-gold-bright); outline-offset: 2px; }
-.btn-gold { background: var(--color-gold); border-color: var(--color-gold-bright); color: var(--color-ink); }
+.btn-gold { background: var(--color-gold); border-color: var(--color-gold-bright); color: var(--on-surface); }
 .btn-gold:hover { background: var(--color-gold-bright); }
 .btn-ghost { background: transparent; color: var(--color-mahogany); border-color: var(--color-mahogany); }
 .btn-ghost:hover { background: rgba(92,58,33,0.08); }
@@ -168,7 +206,7 @@ button, input, select, textarea { font-family: inherit; }
   border: 1px solid rgba(42,29,20,0.25);
   border-radius: var(--radius-sm);
   background: var(--color-parchment-dark);
-  color: var(--color-ink);
+  color: var(--on-surface);
   font-size: var(--text-base);
 }
 .input:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
@@ -338,7 +376,7 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 0.8rem; font-weight: bold; color: var(--color-mahogany-dark);
 }
 .book-spine.is-selected .spine-select-checkbox {
-  background: var(--color-gold-bright); border-color: var(--color-gold-bright); color: var(--color-ink);
+  background: var(--color-gold-bright); border-color: var(--color-gold-bright); color: var(--on-surface);
 }
 .dash-stats { display: flex; gap: var(--space-4); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-mahogany-dark); }
 .dash-stats b { display: block; font-family: var(--font-display); font-size: var(--text-lg); color: var(--color-ink); }
@@ -394,13 +432,26 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--spine-color, var(--color-mahogany));
 }
 .book-spine:hover { transform: translateY(-10px) rotate(-1deg); box-shadow: 0 14px 24px rgba(42,29,20,0.4); }
+.book-spine .spine-text-block {
+  /* Este "letrero" siempre tiene su propio fondo oscuro, sin importar
+     el color del lomo (--spine-color), la portada prediseñada o la
+     imagen de portada subida. Asi el titulo/autor (color parchment,
+     ver arriba) nunca pierde contraste, incluso sobre portadas
+     blancas o muy claras. */
+  position: relative;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 5px 8px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(20,14,9,0.35), rgba(12,8,5,0.82));
+}
 .book-spine .spine-title {
   font-family: var(--font-display);
   font-size: 0.8rem;
   line-height: 1.2;
   font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
-.book-spine .spine-author { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.85; }
+.book-spine .spine-author { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.9; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 .book-spine .spine-progress {
   height: 3px;
   background: rgba(255,255,255,0.25);
@@ -576,7 +627,7 @@ button, input, select, textarea { font-family: inherit; }
   gap: 8px;
   padding: 0.65rem 1rem;
   background: var(--color-gold);
-  color: var(--color-ink);
+  color: var(--on-surface);
   border: none;
   border-radius: 999px;
   font-family: var(--font-mono);
@@ -971,7 +1022,7 @@ button, input, select, textarea { font-family: inherit; }
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.page-turn-btn:hover { background: var(--color-gold); color: var(--color-ink); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.35); }
+.page-turn-btn:hover { background: var(--color-gold); color: var(--on-surface); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.35); }
 .page-turn-btn:active { transform: translateY(0); }
 .page-turn-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
 .reader-page-indicator {
@@ -1072,7 +1123,7 @@ button, input, select, textarea { font-family: inherit; }
 .music-tabs { display: flex; border-bottom: 1px solid rgba(92,58,33,0.2); }
 .music-tab-btn {
   flex: 1; border: none; background: none; padding: 8px; cursor: pointer;
-  font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-ink); opacity: 0.6;
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--on-surface); opacity: 0.6;
 }
 .music-tab-btn.active { opacity: 1; border-bottom: 2px solid var(--color-gold); font-weight: bold; }
 
@@ -1088,7 +1139,7 @@ button, input, select, textarea { font-family: inherit; }
 .music-track-row.is-current { background: rgba(212,175,106,0.25); }
 .music-track-play {
   display: flex; align-items: center; gap: 8px; border: none; background: none; cursor: pointer;
-  color: var(--color-ink); font-size: 0.82rem; text-align: left; flex: 1; min-width: 0;
+  color: var(--on-surface); font-size: 0.82rem; text-align: left; flex: 1; min-width: 0;
 }
 .music-track-play span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .music-track-remove { border: none; background: none; cursor: pointer; color: var(--color-burgundy); opacity: 0.7; }
@@ -1117,3 +1168,114 @@ button, input, select, textarea { font-family: inherit; }
   .music-panel { right: 12px; left: 12px; width: auto; bottom: calc(var(--space-4) + 60px); }
   .music-fab { right: 16px; bottom: 16px; }
 }
+
+/* =========================================================
+   INSIGHTS DEL DASHBOARD — continuar leyendo, racha, meta,
+   calendario de actividad, logros y estadisticas.
+   ========================================================= */
+.dash-insights { margin-bottom: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+
+.continue-reading-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-parchment-dark);
+  border: 1px solid var(--color-mahogany);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.continue-reading-card:hover { transform: translateY(-2px); }
+.continue-reading-icon {
+  flex: none;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  background: var(--color-mahogany);
+  color: var(--color-parchment);
+  border-radius: 50%;
+}
+.continue-reading-info { flex: 1; min-width: 0; }
+.continue-reading-info h3 { font-family: var(--font-display); font-size: var(--text-lg); margin: 2px 0; color: var(--on-surface); }
+.continue-reading-author { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-mahogany); margin: 0; }
+.continue-reading-progress { margin-top: 6px; max-width: 220px; background: rgba(92,58,33,0.18); }
+.continue-reading-progress i { background: var(--color-gold); }
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.insight-card {
+  background: var(--color-parchment-dark);
+  border: 1px solid rgba(92,58,33,0.25);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-3);
+}
+.insight-subtext { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-mahogany-dark); margin: 4px 0 0; }
+.insight-divider { border: none; border-top: 1px dashed rgba(92,58,33,0.3); margin: var(--space-2) 0; }
+
+.streak-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.streak-icon { color: var(--color-sage); flex: none; }
+.streak-number { font-family: var(--font-display); font-size: var(--text-xl); color: var(--on-surface); margin-right: 4px; }
+
+.goal-progress { height: 8px; border-radius: 4px; background: rgba(92,58,33,0.18); overflow: hidden; margin-top: 4px; }
+.goal-progress i { display: block; height: 100%; background: var(--color-gold); }
+
+.stats-list { margin: 6px 0 0; padding-left: 1.1em; font-size: var(--text-sm); color: var(--on-surface); }
+.stats-list li { margin-bottom: 4px; }
+
+.achievements-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.achievement-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 0.68rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(92,58,33,0.3);
+  color: var(--color-mahogany-dark);
+  opacity: 0.5;
+}
+.achievement-badge.unlocked {
+  opacity: 1;
+  background: var(--color-gold);
+  border-color: var(--color-gold-bright);
+  color: var(--on-surface);
+}
+
+.activity-calendar-card { overflow-x: auto; }
+.activity-calendar { display: flex; gap: 3px; margin-top: 8px; }
+.activity-week { display: flex; flex-direction: column; gap: 3px; }
+.activity-day {
+  width: 11px; height: 11px;
+  border-radius: 2px;
+  background: rgba(92,58,33,0.14);
+  display: block;
+}
+.activity-day.level-1 { background: #C9D6BE; }
+.activity-day.level-2 { background: #9FB88C; }
+.activity-day.level-3 { background: var(--color-sage); }
+.activity-day.level-4 { background: #4E6B44; }
+
+/* Open Library — autocompletado al agregar un libro */
+.ol-search-field { border: 1px dashed var(--color-gold); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
+.ol-search-row { display: flex; gap: 6px; }
+.ol-search-row .input { flex: 1; }
+.ol-results { margin-top: 6px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.ol-result-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  background: var(--color-parchment); border: 1px solid rgba(92,58,33,0.2);
+  border-radius: 6px; padding: 5px 8px; cursor: pointer;
+}
+.ol-result-row:hover { background: var(--color-parchment-dark); }
+.ol-result-cover { width: 28px; height: 40px; object-fit: cover; border-radius: 2px; flex: none; }
+.ol-result-cover-empty { display: grid; place-items: center; background: rgba(92,58,33,0.15); color: var(--color-mahogany); }
+.ol-result-text { display: flex; flex-direction: column; min-width: 0; }
+.ol-result-title { font-family: var(--font-display); font-size: 0.85rem; color: var(--on-surface); }
+.ol-result-author { font-family: var(--font-mono); font-size: 0.65rem; color: var(--color-mahogany); }
+
+/* Notas de texto libre en el lector */
+.note-textarea { width: 100%; resize: vertical; font-family: var(--font-body); }
+
